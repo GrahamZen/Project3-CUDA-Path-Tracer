@@ -20,12 +20,6 @@ enum BsdfSampleType
     microfacet_trans = 1 << 7
 };
 
-
-enum GeomType {
-    SPHERE,
-    CUBE,
-};
-
 struct Ray {
     glm::vec3 origin;
     glm::vec3 direction;
@@ -35,8 +29,8 @@ __device__ static Ray SpawnRay(glm::vec3 pos, glm::vec3 wi) {
     return Ray{ pos + wi * 0.01f, wi };
 }
 
-struct Geom {
-    enum GeomType type;
+struct Geom
+{
     int materialid;
     glm::vec3 translation;
     glm::vec3 rotation;
@@ -44,6 +38,9 @@ struct Geom {
     glm::mat4 transform;
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
+    glm::vec3 v0, v1, v2;
+    glm::vec3 normal0, normal1, normal2;
+    glm::vec2 uv0, uv1, uv2;
 };
 
 struct Material {
@@ -100,4 +97,5 @@ struct ShadeableIntersection {
     glm::vec3 surfaceNormal;
     int materialId;
     glm::vec3 woW;
+    glm::vec2 uv;
 };

@@ -169,9 +169,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         PathSegment& segment = pathSegments[index];
 #if ANTIALIASING
         thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
-            thrust::uniform_real_distribution<float> u(-0.5, 0.5);
-            rx = u(rng);
-            ry = u(rng);
+        thrust::uniform_real_distribution<float> u(-0.5, 0.5);
+        rx = u(rng);
+        ry = u(rng);
 #endif // ANTIALIASING
         segment.ray.origin = cam.position;
         segment.color = glm::vec3(0.f);
@@ -214,25 +214,19 @@ __global__ void computeIntersections(
         glm::vec3 normal;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
-        bool outside = true;
 
         glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
+        glm::vec2 tmp_uv;
 
         // naive parse through global geoms
 
         for (int i = 0; i < geoms_size; i++)
         {
-            Geom& geom = geoms[i];
+            Geom& tri = geoms[i];
 
-            if (geom.type == CUBE)
-            {
-                t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-            }
-            else if (geom.type == SPHERE)
-            {
-                t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-            }
+            
+            t = triangleIntersectionTest(tri, pathSegment.ray, tmp_intersect, tmp_normal, tmp_uv);
             // TODO: add more intersection tests here... triangle? metaball? CSG?
 
             // Compute the minimum t from the intersection tests to determine what
