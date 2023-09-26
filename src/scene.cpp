@@ -8,7 +8,7 @@
 #include "tiny_gltf.h"
 
 template<typename T>
-std::pair<const T*, int> getPrimitiveBuffer(tinygltf::Model* model, const tinygltf::Primitive& primitive, const string& type) {
+std::pair<const T*, int> getPrimitiveBuffer(tinygltf::Model* model, const tinygltf::Primitive& primitive, const std::string& type) {
     if (primitive.attributes.find(type) == primitive.attributes.end())return{ nullptr,0 };
     const tinygltf::Accessor& accessor = model->accessors[primitive.attributes.at(type)];
     const tinygltf::BufferView& bufferView = model->bufferViews[accessor.bufferView];
@@ -56,10 +56,10 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
     transforms.push_back(t);
 }
 
-Scene::Scene(string filename, int height = 1600)
+Scene::Scene(std::string filename, int height = 1600)
 {
-    cout << "Reading scene from " << filename << " ..." << endl;
-    cout << " " << endl;
+    std::cout << "Reading scene from " << filename << " ..." << std::endl;
+    std::cout << " " << std::endl;
     tinygltf::TinyGLTF loader;
     std::string err;
     std::string warn;
@@ -177,11 +177,9 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
     return geoms.size();
 }
 
-
-
 int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 {
-    cout << "Loading Camera ..." << endl;
+    std::cout << "Loading Camera ..." << std::endl;
     Camera& camera = state.camera;
     camera.resolution.y = height;
     float fovy;
@@ -203,7 +201,7 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
     else if (gltfCamera.type == "orthographic")
     {
         const tinygltf::OrthographicCamera& ortho = gltfCamera.orthographic;
-        cout << "Orthographic Camera not implemented." << endl;
+        std::cout << "Orthographic Camera not implemented." << std::endl;
         return 0;
     }
     float yscaled = tan(fovy * (PI / 180));
@@ -224,6 +222,6 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 
 int Scene::loadMaterial()
 {
-
+    //materials = model->materials;
     return 1;
 }

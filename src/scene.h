@@ -12,7 +12,6 @@ namespace tinygltf {
     class Model;
     class Node;
 }
-using namespace std;
 
 class Scene {
 private:
@@ -25,7 +24,7 @@ private:
     int loadCamera(const tinygltf::Node&, const glm::mat4& transform);
     const int height = 600;
 public:
-    Scene(string filename, int height);
+    Scene(std::string filename, int height);
     ~Scene();
 
     std::vector<Geom> geoms;
