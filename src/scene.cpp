@@ -54,7 +54,7 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
     transforms.push_back(t);
 }
 
-Scene::Scene(std::string filename, int height = 1600)
+Scene::Scene(std::string filename)
 {
     std::cout << "Reading scene from " << filename << " ..." << std::endl;
     std::cout << " " << std::endl;
@@ -72,6 +72,9 @@ Scene::Scene(std::string filename, int height = 1600)
         exit(-1);
     }
     loadScene();
+    if (cameras.empty()) {
+        genDefaultCamera();
+    }
     auto& camera = cameras[0];
     state.camera = camera;
     //set up render camera stuff
@@ -183,6 +186,20 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
         }
     }
     return geoms.size();
+}
+
+void Scene::genDefaultCamera()
+{
+    std::cout << "Generating default Camera ..." << std::endl;
+    Camera camera;
+    camera.resolution = glm::vec2(height, height);
+    float yscaled = tan(camera.fov.y * (PI / 180));
+    float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
+    float fovx = (atan(xscaled) * 180) / PI;
+
+    camera.right = glm::normalize(glm::cross(camera.view, camera.up));
+    camera.pixelLength = glm::vec2(2 * xscaled / (float)camera.resolution.x, 2 * yscaled / (float)camera.resolution.y);
+    cameras.push_back(camera);
 }
 
 int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)

@@ -81,7 +81,7 @@ struct PbrMetallicRoughness {
     TextureInfo metallicRoughnessTexture;
 
     PbrMetallicRoughness()
-        : baseColorFactor(glm::vec4{}) {}
+        : baseColorFactor(glm::vec4{1.}) {}
     DEFAULT_METHODS(PbrMetallicRoughness)
         bool operator==(const PbrMetallicRoughness&) const;
 };
@@ -131,12 +131,12 @@ struct Material {
 
 struct Camera {
     glm::ivec2 resolution;
-    glm::vec3 position;
+    glm::vec3 position = glm::vec3(0, 0, 5);
     glm::vec3 lookAt;
     glm::vec3 view = glm::vec3(0, 0, -1);
     glm::vec3 up = glm::vec3(0, 1, 0);
     glm::vec3 right = glm::vec3(1, 0, 0);
-    glm::vec2 fov;
+    glm::vec2 fov = glm::vec2(45,45);
     glm::vec2 pixelLength;
 };
 
