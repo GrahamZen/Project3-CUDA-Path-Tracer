@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
 	const char* sceneFile = argv[1];
 
 	// Load scene file
-	scene = new Scene(sceneFile);
+	scene = new Scene(sceneFile, 800);
 
 	//Create Instance for ImGUIData
 	guiData = new GuiDataContainer();

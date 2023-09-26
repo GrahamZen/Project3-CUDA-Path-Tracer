@@ -31,13 +31,12 @@ __device__ static Ray SpawnRay(glm::vec3 pos, glm::vec3 wi) {
 
 struct Geom
 {
+    struct Transformation {
+        glm::mat4 transform;
+        glm::mat4 inverseTransform;
+        glm::mat4 invTranspose;
+    }T;
     int materialid;
-    glm::vec3 translation;
-    glm::vec3 rotation;
-    glm::vec3 scale;
-    glm::mat4 transform;
-    glm::mat4 inverseTransform;
-    glm::mat4 invTranspose;
     glm::vec3 v0, v1, v2;
     glm::vec3 normal0, normal1, normal2;
     glm::vec2 uv0, uv1, uv2;
@@ -64,9 +63,9 @@ struct Camera {
     glm::ivec2 resolution;
     glm::vec3 position;
     glm::vec3 lookAt;
-    glm::vec3 view;
-    glm::vec3 up;
-    glm::vec3 right;
+    glm::vec3 view = glm::vec3(0, 0, 1);
+    glm::vec3 up = glm::vec3(0, 1, 0);
+    glm::vec3 right = glm::vec3(1, 0, 0);
     glm::vec2 fov;
     glm::vec2 pixelLength;
 };

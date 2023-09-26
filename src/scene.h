@@ -8,16 +8,24 @@
 #include "utilities.h"
 #include "sceneStructs.h"
 
+namespace tinygltf {
+    class Model;
+    class Node;
+}
 using namespace std;
 
 class Scene {
 private:
-    ifstream fp_in;
-    int loadMaterial(string materialid);
-    int loadGeom(string objectid);
-    int loadCamera();
+    tinygltf::Model* model;
+    int loadMaterial();
+    int loadScene();
+    void traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& transforms);
+    void loadNode(const tinygltf::Node& node);
+    int loadGeom(const tinygltf::Node& node, const Geom::Transformation& transform);
+    int loadCamera(const tinygltf::Node&, const glm::mat4& transform);
+    const int height = 600;
 public:
-    Scene(string filename);
+    Scene(string filename, int height);
     ~Scene();
 
     std::vector<Geom> geoms;
