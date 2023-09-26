@@ -95,7 +95,7 @@ struct Material {
         ROUGH_DIELECTRIC = 1 << 3,
         PLASTIC = 1 << 4
     };
-    uint32_t type = 0;
+    uint32_t type = Type::DIFFUSE;
 
     glm::vec3 emissiveFactor = glm::vec3(1.f);  // length 3. default [0, 0, 0]
     // std::string alphaMode;               // default "OPAQUE"
@@ -133,7 +133,7 @@ struct Camera {
     glm::ivec2 resolution;
     glm::vec3 position;
     glm::vec3 lookAt;
-    glm::vec3 view = glm::vec3(0, 0, 1);
+    glm::vec3 view = glm::vec3(0, 0, -1);
     glm::vec3 up = glm::vec3(0, 1, 0);
     glm::vec3 right = glm::vec3(1, 0, 0);
     glm::vec2 fov;

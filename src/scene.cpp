@@ -72,6 +72,13 @@ Scene::Scene(std::string filename, int height = 1600)
         exit(-1);
     }
     loadScene();
+    auto& camera = cameras[0];
+    state.camera = camera;
+    //set up render camera stuff
+    int arraylen = camera.resolution.x * camera.resolution.y;
+    state.image.resize(arraylen);
+    std::fill(state.image.begin(), state.image.end(), glm::vec3());
+
 }
 
 Scene::~Scene()
@@ -80,16 +87,16 @@ Scene::~Scene()
 }
 
 Geom::Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
-    Geom::Transformation T;
-    T.transform = glm::mat4(1.0f);
-    T.inverseTransform = glm::mat4(1.0f);
-    T.invTranspose = glm::mat4(1.0f);
+    Geom::Transformation t;
+    t.transform = glm::mat4(1.0f);
+    t.inverseTransform = glm::mat4(1.0f);
+    t.invTranspose = glm::mat4(1.0f);
     for (auto it = transforms.rbegin(); it != transforms.rend(); ++it) {
-        T.transform = T.transform * (*it);
+        t.transform = t.transform * (*it);
     }
-    T.inverseTransform = glm::inverse(T.transform);
-    T.invTranspose = glm::transpose(T.inverseTransform);
-    return std::move(T);
+    t.inverseTransform = glm::inverse(t.transform);
+    t.invTranspose = glm::transpose(t.inverseTransform);
+    return t;
 }
 
 void Scene::traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& transforms) {
@@ -181,7 +188,7 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
 int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 {
     std::cout << "Loading Camera ..." << std::endl;
-    Camera& camera = state.camera;
+    Camera camera;
     camera.resolution.y = height;
     float fovy;
     const tinygltf::Camera& gltfCamera = model->cameras[node.camera];
@@ -196,7 +203,7 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
     if (gltfCamera.type == "perspective")
     {
         const tinygltf::PerspectiveCamera& perspective = gltfCamera.perspective;
-        fovy = perspective.yfov;
+        fovy = glm::degrees(perspective.yfov);
         camera.resolution.x = perspective.aspectRatio * camera.resolution.y;
     }
     else if (gltfCamera.type == "orthographic")
@@ -212,11 +219,7 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 
     camera.right = glm::normalize(glm::cross(camera.view, camera.up));
     camera.pixelLength = glm::vec2(2 * xscaled / (float)camera.resolution.x, 2 * yscaled / (float)camera.resolution.y);
-
-    //set up render camera stuff
-    int arraylen = camera.resolution.x * camera.resolution.y;
-    state.image.resize(arraylen);
-    std::fill(state.image.begin(), state.image.end(), glm::vec3());
+    cameras.push_back(camera);
 }
 
 
@@ -255,6 +258,7 @@ void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& ext
         }
         else if (extensionName == "KHR_materials_specular") {
             // Extract specular color factor for metallic material
+            material.type = Material::Type::DIELECTRIC;
             material.dielectric.eta = extensionValue.Get("specularFactor").Get<double>();
         }
         else if (extensionName == "KHR_materials_transmission") {
