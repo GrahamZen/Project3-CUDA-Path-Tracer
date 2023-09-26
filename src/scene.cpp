@@ -120,6 +120,7 @@ int Scene::loadScene()
 {
     RenderState& state = this->state;
     geoms.clear();
+    int num_mat = loadMaterial();
 
     const tinygltf::Scene& scene = model->scenes[model->defaultScene];
     for (size_t i = 0; i < scene.nodes.size(); i++)
@@ -127,7 +128,9 @@ int Scene::loadScene()
         const tinygltf::Node& node = model->nodes[scene.nodes[i]];
         loadNode(node);
     }
-
+    if (num_mat == 0) {
+        materials.emplace_back();
+    }
 
     return 1;
 }
@@ -141,7 +144,7 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
             const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
 
             if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
-                int materialId = primitive.material;
+                int materialId = materials.empty() ? defaultMatId : primitive.material;
 
                 auto [positions, posCnt] = getPrimitiveBuffer<float>(model, primitive, "POSITION");
                 auto [normals, norCnt] = getPrimitiveBuffer<float>(model, primitive, "NORMAL");
@@ -217,9 +220,81 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 }
 
 
-
-int Scene::loadMaterial()
+PbrMetallicRoughness&& Scene::loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat)
 {
-    //materials = model->materials;
-    return 1;
+    PbrMetallicRoughness result;
+
+    // Load base color factor
+    for (size_t i = 0; i < pbrMat.baseColorFactor.size(); ++i) {
+        result.baseColorFactor[i] = pbrMat.baseColorFactor[i];
+    }
+
+    // Load base color texture
+    result.baseColorTexture.index = pbrMat.baseColorTexture.index;
+
+    // Load metallic factor
+    result.metallicFactor = pbrMat.metallicFactor;
+
+    // Load roughness factor
+    result.roughnessFactor = pbrMat.roughnessFactor;
+
+    // Load metallic roughness texture
+    result.metallicRoughnessTexture.index = pbrMat.metallicRoughnessTexture.index;
+
+    return std::move(result);
+}
+
+void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& extensionMap)
+{
+    for (const auto& entry : extensionMap) {
+        const std::string& extensionName = entry.first;
+        const auto& extensionValue = entry.second;
+
+        if (extensionName == "KHR_materials_ior") {
+            material.dielectric.eta = extensionValue.Get("ior").Get<double>();
+        }
+        else if (extensionName == "KHR_materials_specular") {
+            // Extract specular color factor for metallic material
+            material.dielectric.eta = extensionValue.Get("specularFactor").Get<double>();
+        }
+        else if (extensionName == "KHR_materials_transmission") {
+            // Extract transmission factor for dielectric material
+        }
+        else {
+            std::cerr << extensionName << " not supported." << std::endl;
+        }
+        // Add more conditions for other extensions as needed
+    }
+}
+
+
+int Scene::loadMaterial() {
+    const std::vector<tinygltf::Material>& gltfMaterials = model->materials;
+    materials.clear(); // Clear existing materials
+
+    for (size_t i = 0; i < gltfMaterials.size(); ++i) {
+        const tinygltf::Material& gltfMaterial = gltfMaterials[i];
+        Material material;
+        material.pbrMetallicRoughness = loadPbrMetallicRoughness(gltfMaterial.pbrMetallicRoughness);
+
+        const auto& emissiveFactor = gltfMaterial.emissiveFactor;
+        material.emissiveFactor = glm::vec3(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2]);
+        material.alphaCutoff = gltfMaterial.alphaCutoff;
+        material.doubleSided = gltfMaterial.doubleSided;
+
+        if (gltfMaterial.normalTexture.index >= 0)
+            material.normalTexture.index = gltfMaterial.normalTexture.index;
+        if (gltfMaterial.occlusionTexture.index >= 0)
+            material.occlusionTexture.index = gltfMaterial.occlusionTexture.index;
+        if (gltfMaterial.emissiveTexture.index >= 0)
+            material.emissiveTexture.index = gltfMaterial.emissiveTexture.index;
+
+        if (gltfMaterial.extensions.size() != 0)
+            loadExtensions(material, gltfMaterial.extensions);
+
+        // Add the material to the vector
+        materials.push_back(material);
+    }
+
+    return static_cast<int>(materials.size());
 }

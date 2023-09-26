@@ -224,8 +224,6 @@ __global__ void computeIntersections(
         for (int i = 0; i < geoms_size; i++)
         {
             Geom& tri = geoms[i];
-
-            
             t = triangleIntersectionTest(tri, pathSegment.ray, tmp_intersect, tmp_normal, tmp_uv);
             // TODO: add more intersection tests here... triangle? metaball? CSG?
 
@@ -280,11 +278,11 @@ __global__ void shadeMaterial(
             thrust::uniform_real_distribution<float> u01(0, 1);
 
             Material material = materials[intersection.materialId];
-            glm::vec3 materialColor = material.color;
+            glm::vec3 materialColor{ material.pbrMetallicRoughness.baseColorFactor };
 
             // If the material indicates that the object was a light, "light" the ray
-            if (material.emittance > 0.0f) {
-                pSeg.color = pSeg.throughput * (materialColor * material.emittance);
+            if (glm::length2(material.emissiveFactor) > 0.0f) {
+                pSeg.color = pSeg.throughput * (materialColor * material.emissiveFactor);
                 pSeg.remainingBounces = 0;
             }
             // Otherwise, do some pseudo-lighting computation. This is actually more
