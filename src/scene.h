@@ -7,6 +7,8 @@
 #include "glm/glm.hpp"
 #include "utilities.h"
 #include "sceneStructs.h"
+// #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
+#include "tiny_gltf.h"
 
 namespace tinygltf {
     class Model;

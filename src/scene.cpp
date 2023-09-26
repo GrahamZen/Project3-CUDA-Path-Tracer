@@ -1,11 +1,9 @@
-#include "scene.h"
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <iostream>
-// #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
 #define TINYGLTF_IMPLEMENTATION
-#include "tiny_gltf.h"
+#include "scene.h"
 
 template<typename T>
 std::pair<const T*, int> getPrimitiveBuffer(tinygltf::Model* model, const tinygltf::Primitive& primitive, const std::string& type) {
