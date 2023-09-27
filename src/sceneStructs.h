@@ -33,7 +33,7 @@ struct Geom
         glm::mat4 transform;
         glm::mat4 inverseTransform;
         glm::mat4 invTranspose;
-    }T;
+    }t;
     int materialid;
     glm::vec3 v0, v1, v2;
     glm::vec3 normal0, normal1, normal2;
@@ -81,7 +81,7 @@ struct PbrMetallicRoughness {
     TextureInfo metallicRoughnessTexture;
 
     PbrMetallicRoughness()
-        : baseColorFactor(glm::vec4{1.}) {}
+        : baseColorFactor(glm::vec4{ 1. }) {}
     DEFAULT_METHODS(PbrMetallicRoughness)
         bool operator==(const PbrMetallicRoughness&) const;
 };
@@ -136,7 +136,7 @@ struct Camera {
     glm::vec3 view = glm::vec3(0, 0, -1);
     glm::vec3 up = glm::vec3(0, 1, 0);
     glm::vec3 right = glm::vec3(1, 0, 0);
-    glm::vec2 fov = glm::vec2(45,45);
+    glm::vec2 fov = glm::vec2(45, 45);
     glm::vec2 pixelLength;
 };
 

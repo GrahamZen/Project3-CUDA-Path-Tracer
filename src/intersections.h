@@ -31,15 +31,15 @@ __host__ __device__ glm::vec3 getPointOnRay(Ray r, float t) {
 /**
  * Multiplies a mat4 and a vec4 and returns a vec3 clipped from the vec4.
  */
-__host__ __device__ glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v) {
+__host__ __device__ glm::vec3 multiplyMV(const glm::mat4& m, const glm::vec4& v) {
     return glm::vec3(m * v);
 }
 
 __host__ __device__ float triangleIntersectionTest(Geom triangle, Ray r, glm::vec3& intersectionPoint, glm::vec3& normal, glm::vec2& uv)
 {
-    glm::vec3 v0 = triangle.v0;
-    glm::vec3 v1 = triangle.v1;
-    glm::vec3 v2 = triangle.v2;
+    glm::vec3 v0 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v0, 1.f));
+    glm::vec3 v1 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v1, 1.f));
+    glm::vec3 v2 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v2, 1.f));
     glm::vec3 v0v1 = v1 - v0;
     glm::vec3 v0v2 = v2 - v0;
     glm::vec3 tvec = r.origin - v0;
@@ -64,6 +64,7 @@ __host__ __device__ float triangleIntersectionTest(Geom triangle, Ray r, glm::ve
     normal = glm::vec3(w * triangle.normal0 + u * triangle.normal1 + v * triangle.normal2);
     if (glm::dot(r.direction, normal) >= 0)
         normal = -normal;
+    normal = glm::normalize(multiplyMV(triangle.t.transform, glm::vec4(normal, 1.f)));
     return t;
 }
 

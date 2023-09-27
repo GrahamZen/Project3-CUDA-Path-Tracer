@@ -30,25 +30,22 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
     glm::mat4 transformation(1.0f);
     glm::mat4 t;
     if (!node.matrix.empty()) {
-        transformation = glm::mat4(node.matrix[0], node.matrix[1], node.matrix[2], node.matrix[3],
-            node.matrix[4], node.matrix[5], node.matrix[6], node.matrix[7],
-            node.matrix[8], node.matrix[9], node.matrix[10], node.matrix[11],
-            node.matrix[12], node.matrix[13], node.matrix[14], node.matrix[15]);
+        transformation = glm::make_mat4(node.matrix.data());
         t = transformation;
     }
 
     if (!node.translation.empty()) {
-        translation = glm::vec3(node.translation[0], node.translation[1], node.translation[2]);
+        translation = glm::make_vec3(node.translation.data());
         t = glm::translate(glm::mat4(1.0f), translation);
     }
 
     if (!node.rotation.empty()) {
-        rotation = glm::quat(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]);
+        rotation = glm::make_quat(node.rotation.data());
         t = glm::mat4_cast(rotation);
     }
 
     if (!node.scale.empty()) {
-        scale = glm::vec3(node.scale[0], node.scale[1], node.scale[2]);
+        scale = glm::make_vec3(node.scale.data());
         t = glm::scale(glm::mat4(1.0f), scale);
     }
     transforms.push_back(t);
@@ -145,7 +142,7 @@ int Scene::loadScene()
     return 1;
 }
 
-int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
+int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
 {
     if (node.mesh >= 0) {
         const tinygltf::Mesh& mesh = model->meshes[node.mesh];
@@ -165,11 +162,10 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& T)
                     const size_t v0Id = indices[i];
                     const size_t v1Id = indices[i + 1];
                     const size_t v2Id = indices[i + 2];
-                    Geom triangle;
-                    triangle.materialid = materialId;
-                    triangle.v0 = glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]);
-                    triangle.v1 = glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]);
-                    triangle.v2 = glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]);
+                    Geom triangle{ t,materialId,
+                        glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]),
+                        glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]),
+                        glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]) };
                     if (normals) {
                         triangle.normal0 = glm::vec3(normals[v0Id * 3], normals[v0Id * 3 + 1], normals[v0Id * 3 + 2]);
                         triangle.normal1 = glm::vec3(normals[v1Id * 3], normals[v1Id * 3 + 1], normals[v1Id * 3 + 2]);
@@ -210,10 +206,11 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
     float fovy;
     const tinygltf::Camera& gltfCamera = model->cameras[node.camera];
     if (node.translation.size() == 3)
-        camera.position = glm::vec3(transform * glm::vec4(node.translation[0], node.translation[1], node.translation[2], 1.0f));
+        camera.position = glm::vec3(transform * glm::vec4(glm::make_vec3(node.translation.data()), 1.0f));
     if (node.rotation.size() == 4)
     {
-        glm::mat4 rot = transform * glm::mat4_cast(glm::quat(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]));
+        glm::mat4 rot = glm::mat4_cast(glm::make_quat(node.rotation.data()));;
+        rot = transform * rot;
         camera.view = glm::vec3(rot * glm::vec4(camera.view, 0.0f));
         camera.up = glm::vec3(rot * glm::vec4(camera.up, 0.0f));
     }
@@ -299,7 +296,7 @@ int Scene::loadMaterial() {
         material.pbrMetallicRoughness = loadPbrMetallicRoughness(gltfMaterial.pbrMetallicRoughness);
 
         const auto& emissiveFactor = gltfMaterial.emissiveFactor;
-        material.emissiveFactor = glm::vec3(emissiveFactor[0], emissiveFactor[1], emissiveFactor[2]);
+        material.emissiveFactor = glm::make_vec3(emissiveFactor.data());
         material.alphaCutoff = gltfMaterial.alphaCutoff;
         material.doubleSided = gltfMaterial.doubleSided;
 

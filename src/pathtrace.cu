@@ -281,7 +281,7 @@ __global__ void shadeMaterial(
             glm::vec3 materialColor{ material.pbrMetallicRoughness.baseColorFactor };
 
             // If the material indicates that the object was a light, "light" the ray
-            if (glm::length2(material.emissiveFactor) > 0.0f) {
+            if (glm::length2(material.emissiveFactor) > 0.0f && dot(pSeg.ray.direction, intersection.surfaceNormal) < 0.f) {
                 pSeg.color = pSeg.throughput * (materialColor * material.emissiveFactor);
                 pSeg.remainingBounces = 0;
             }
