@@ -131,21 +131,20 @@ struct Material {
 
 struct Camera {
     glm::ivec2 resolution;
-    glm::vec3 position = glm::vec3(0, 0, 5);
+    glm::vec3 position;
     glm::vec3 lookAt;
-    glm::vec3 view = glm::vec3(0, 0, -1);
-    glm::vec3 up = glm::vec3(0, 1, 0);
-    glm::vec3 right = glm::vec3(1, 0, 0);
-    glm::vec2 fov = glm::vec2(45, 45);
+    glm::vec3 view;
+    glm::vec3 up;
+    glm::vec3 right;
+    glm::vec2 fov;
     glm::vec2 pixelLength;
 };
 
 struct RenderState {
-    // TODO: load global settings by json
     Camera camera;
-    unsigned int iterations = 5000;
+    unsigned int iterations;
     bool isCached = false;
-    int traceDepth = 8;
+    int traceDepth;
     std::vector<glm::vec3> image;
     std::string imageName;
 };

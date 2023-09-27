@@ -2,8 +2,27 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <iostream>
+#include <filesystem>
 #define TINYGLTF_IMPLEMENTATION
 #include "scene.h"
+
+namespace fs = std::filesystem;
+
+std::ifstream findFile(const std::string& fileName) {
+    fs::path currentPath = fs::current_path();
+    for (int i = 0; i < 3; ++i) {
+        fs::path filePath = currentPath / fileName;
+        if (fs::exists(filePath)) {
+            std::ifstream fileStream(filePath);
+            if (fileStream.is_open())
+                return fileStream;
+        }
+        currentPath = currentPath.parent_path();
+    }
+
+    std::cerr << "File not found: " << fileName << std::endl;
+    return std::ifstream();
+}
 
 template<typename T>
 std::pair<const T*, int> getPrimitiveBuffer(tinygltf::Model* model, const tinygltf::Primitive& primitive, const std::string& type) {
@@ -53,6 +72,9 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
 
 Scene::Scene(std::string filename)
 {
+    loadSettings();
+    if (settings.readFromFile)
+        filename = settings.gltfPath;
     std::cout << "Reading scene from " << filename << " ..." << std::endl;
     std::cout << " " << std::endl;
     tinygltf::TinyGLTF loader;
@@ -70,7 +92,7 @@ Scene::Scene(std::string filename)
     }
     loadScene();
     if (cameras.empty()) {
-        genDefaultCamera();
+        cameras.push_back(settings.defaultRenderState.camera);
     }
     auto& camera = cameras[0];
     state.camera = camera;
@@ -104,7 +126,7 @@ void Scene::traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& tra
         loadCamera(node, evaluateTransform(transforms).transform);
     }
     if (node.mesh != -1) {
-        loadGeom(node, evaluateTransform(transforms));
+        std::cout << loadGeom(node, evaluateTransform(transforms)) << " triangles loaded." << std::endl;
     }
     updateTransform(node, transforms);
     for (int childIndex : node.children) {
@@ -126,9 +148,11 @@ void Scene::loadNode(const tinygltf::Node& node)
 int Scene::loadScene()
 {
     RenderState& state = this->state;
+    state = settings.defaultRenderState;
     geoms.clear();
     int num_mat = loadMaterial();
 
+    std::cout << num_mat << " materials loaded." << std::endl;
     const tinygltf::Scene& scene = model->scenes[model->defaultScene];
     for (size_t i = 0; i < scene.nodes.size(); i++)
     {
@@ -136,10 +160,74 @@ int Scene::loadScene()
         loadNode(node);
     }
     if (num_mat == 0) {
-        materials.emplace_back();
+        materials.push_back(settings.defaultMat);
     }
 
     return 1;
+}
+
+void Scene::loadSettings() {
+    try {
+        std::ifstream fileStream = findFile(settings.filename);
+        if (!fileStream.is_open()) {
+            std::cerr << "Failed to open JSON file: " << settings.filename << std::endl;
+            return;
+        }
+
+        nlohmann::json jsonData;
+        fileStream >> jsonData;
+
+        RenderState& renderState = settings.defaultRenderState;
+        Camera& camera = renderState.camera;
+        Material& defaultMat = settings.defaultMat;
+        settings.readFromFile = jsonData["GLTF"]["from file"];
+        settings.gltfPath = jsonData["GLTF"]["path"];
+
+        nlohmann::json renderStateData = jsonData["RenderState"];
+        camera.resolution.y = renderStateData["camera"]["screen height"];
+        float aspectRatio = renderStateData["camera"]["aspect ratio"];
+        camera.resolution.x = aspectRatio * camera.resolution.y;
+        camera.position = glm::vec3(renderStateData["camera"]["position"][0],
+            renderStateData["camera"]["position"][1],
+            renderStateData["camera"]["position"][2]);
+        camera.lookAt = glm::vec3(renderStateData["camera"]["lookAt"][0],
+            renderStateData["camera"]["lookAt"][1],
+            renderStateData["camera"]["lookAt"][2]);
+        camera.view = glm::vec3(renderStateData["camera"]["view"][0],
+            renderStateData["camera"]["view"][1],
+            renderStateData["camera"]["view"][2]);
+        camera.up = glm::vec3(renderStateData["camera"]["up"][0],
+            renderStateData["camera"]["up"][1],
+            renderStateData["camera"]["up"][2]);
+        camera.fov.y = renderStateData["camera"]["fovy"];
+        computeCameraParams(camera);
+
+        renderState.iterations = renderStateData["iterations"];
+        renderState.traceDepth = renderStateData["traceDepth"];
+        renderState.imageName = renderStateData["imageName"];
+
+        nlohmann::json materialsData = jsonData["Materials"];
+        if (!materialsData.empty()) {
+            defaultMat.type = materialsData[0]["type"];
+            defaultMat.emissiveFactor = glm::vec3(materialsData[0]["emissiveFactor"][0],
+                materialsData[0]["emissiveFactor"][1],
+                materialsData[0]["emissiveFactor"][2]);
+            defaultMat.alphaCutoff = materialsData[0]["alphaCutoff"];
+            defaultMat.doubleSided = materialsData[0]["doubleSided"];
+            defaultMat.pbrMetallicRoughness.baseColorFactor =
+                glm::vec4(materialsData[0]["pbrMetallicRoughness"]["baseColorFactor"][0],
+                    materialsData[0]["pbrMetallicRoughness"]["baseColorFactor"][1],
+                    materialsData[0]["pbrMetallicRoughness"]["baseColorFactor"][2],
+                    materialsData[0]["pbrMetallicRoughness"]["baseColorFactor"][3]);
+            defaultMat.pbrMetallicRoughness.metallicFactor =
+                materialsData[0]["pbrMetallicRoughness"]["metallicFactor"];
+            defaultMat.pbrMetallicRoughness.roughnessFactor =
+                materialsData[0]["pbrMetallicRoughness"]["roughnessFactor"];
+        }
+    }
+    catch (const nlohmann::json::exception& e) {
+        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+    }
 }
 
 int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
@@ -184,26 +272,24 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
     return geoms.size();
 }
 
-void Scene::genDefaultCamera()
+Camera& Scene::computeCameraParams(Camera& camera)const
 {
-    std::cout << "Generating default Camera ..." << std::endl;
-    Camera camera;
-    camera.resolution = glm::vec2(height, height);
+    // assuming resolution, position, lookAt, view, up, fovy are already set
     float yscaled = tan(camera.fov.y * (PI / 180));
     float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
     float fovx = (atan(xscaled) * 180) / PI;
+    camera.fov.x = fovx;
 
     camera.right = glm::normalize(glm::cross(camera.view, camera.up));
     camera.pixelLength = glm::vec2(2 * xscaled / (float)camera.resolution.x, 2 * yscaled / (float)camera.resolution.y);
-    cameras.push_back(camera);
+    return camera;
 }
 
-int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
+bool Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 {
     std::cout << "Loading Camera ..." << std::endl;
     Camera camera;
     camera.resolution.y = height;
-    float fovy;
     const tinygltf::Camera& gltfCamera = model->cameras[node.camera];
     if (node.translation.size() == 3)
         camera.position = glm::vec3(transform * glm::vec4(glm::make_vec3(node.translation.data()), 1.0f));
@@ -217,48 +303,32 @@ int Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
     if (gltfCamera.type == "perspective")
     {
         const tinygltf::PerspectiveCamera& perspective = gltfCamera.perspective;
-        fovy = glm::degrees(perspective.yfov);
+        camera.fov.y = glm::degrees(perspective.yfov);
         camera.resolution.x = perspective.aspectRatio * camera.resolution.y;
     }
     else if (gltfCamera.type == "orthographic")
     {
         const tinygltf::OrthographicCamera& ortho = gltfCamera.orthographic;
         std::cout << "Orthographic Camera not implemented." << std::endl;
-        return 0;
+        return false;
     }
-    float yscaled = tan(fovy * (PI / 180));
-    float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
-    float fovx = (atan(xscaled) * 180) / PI;
-    camera.fov = glm::vec2(fovx, fovy);
-
-    camera.right = glm::normalize(glm::cross(camera.view, camera.up));
-    camera.pixelLength = glm::vec2(2 * xscaled / (float)camera.resolution.x, 2 * yscaled / (float)camera.resolution.y);
-    cameras.push_back(camera);
+    cameras.push_back(computeCameraParams(camera));
+    return true;
 }
 
 
-PbrMetallicRoughness&& Scene::loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat)
+PbrMetallicRoughness Scene::loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat)
 {
     PbrMetallicRoughness result;
-
-    // Load base color factor
     for (size_t i = 0; i < pbrMat.baseColorFactor.size(); ++i) {
         result.baseColorFactor[i] = pbrMat.baseColorFactor[i];
     }
-
-    // Load base color texture
     result.baseColorTexture.index = pbrMat.baseColorTexture.index;
-
-    // Load metallic factor
     result.metallicFactor = pbrMat.metallicFactor;
-
-    // Load roughness factor
     result.roughnessFactor = pbrMat.roughnessFactor;
-
-    // Load metallic roughness texture
     result.metallicRoughnessTexture.index = pbrMat.metallicRoughnessTexture.index;
 
-    return std::move(result);
+    return result;
 }
 
 void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& extensionMap)
@@ -271,24 +341,21 @@ void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& ext
             material.dielectric.eta = extensionValue.Get("ior").Get<double>();
         }
         else if (extensionName == "KHR_materials_specular") {
-            // Extract specular color factor for metallic material
             material.type = Material::Type::DIELECTRIC;
             material.dielectric.eta = extensionValue.Get("specularFactor").Get<double>();
         }
         else if (extensionName == "KHR_materials_transmission") {
-            // Extract transmission factor for dielectric material
         }
         else {
             std::cerr << extensionName << " not supported." << std::endl;
         }
-        // Add more conditions for other extensions as needed
     }
 }
 
 
 int Scene::loadMaterial() {
     const std::vector<tinygltf::Material>& gltfMaterials = model->materials;
-    materials.clear(); // Clear existing materials
+    materials.clear();
 
     for (size_t i = 0; i < gltfMaterials.size(); ++i) {
         const tinygltf::Material& gltfMaterial = gltfMaterials[i];
@@ -310,7 +377,6 @@ int Scene::loadMaterial() {
         if (gltfMaterial.extensions.size() != 0)
             loadExtensions(material, gltfMaterial.extensions);
 
-        // Add the material to the vector
         materials.push_back(material);
     }
 
