@@ -75,6 +75,9 @@ static GuiDataContainer* guiData = nullptr;
 static glm::vec3* dev_image = nullptr;
 static Geom* dev_geoms = nullptr;
 static Material* dev_materials = nullptr;
+static std::vector<cudaArray_t> dev_tex_arrs_vec;
+static cudaTextureObject_t* dev_cuda_tex_objs = nullptr;
+static std::vector<cudaTextureObject_t> cuda_tex_vec;
 static PathSegment* dev_paths = nullptr;
 static PathSegment* dev_paths_terminated = nullptr;
 static int* dev_materialIsectIndices = nullptr;
@@ -93,6 +96,33 @@ void InitDataContainer(GuiDataContainer* imGuiData)
 {
     guiData = imGuiData;
 }
+
+__host__ void textureInit(const Texture& tex, int i) {
+    int width = tex.width;
+    int height = tex.height;
+    cudaChannelFormatDesc desc = cudaCreateChannelDesc<uchar4>();
+    cudaMallocArray(&dev_tex_arrs_vec[i], &desc, width, height);
+    cudaMemcpyToArray(dev_tex_arrs_vec[i], 0, 0, tex.data, width * height * tex.channel * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    struct cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeArray;
+    resDesc.res.array.array = dev_tex_arrs_vec[i];
+
+    struct cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeWrap;
+    texDesc.addressMode[1] = cudaAddressModeWrap;
+    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.readMode = cudaReadModeNormalizedFloat;
+    texDesc.sRGB = 1;
+    texDesc.normalizedCoords = 1;
+
+    cudaCreateTextureObject(&cuda_tex_vec[i], &resDesc, &texDesc, NULL);
+    cudaMemcpy(dev_cuda_tex_objs + i, &cuda_tex_vec[i], sizeof(cudaTextureObject_t), cudaMemcpyHostToDevice);
+    checkCUDAError("textureInit failed");
+}
+
 
 void pathtraceInit(Scene* scene) {
     hst_scene = scene;
@@ -129,6 +159,15 @@ void pathtraceInit(Scene* scene) {
 
     dev_paths_thrust = thrust::device_ptr<PathSegment>(dev_paths);
     dev_paths_terminated_thrust = thrust::device_ptr<PathSegment>(dev_paths_terminated);
+
+    dev_tex_arrs_vec.resize(scene->textures.size());
+    cuda_tex_vec.resize(scene->textures.size());
+
+    for (int i = 0; i < scene->textures.size(); i++)
+    {
+        textureInit(scene->textures[i], i);
+    }
+
     // TODO: initialize any extra device memeory you need
 
     checkCUDAError("pathtraceInit");
@@ -145,6 +184,12 @@ void pathtraceFree() {
     cudaFree(dev_materialIsectIndicesCache);
     cudaFree(dev_materialSegIndices);
     cudaFree(dev_intersections_cache);
+    for (int i = 0; i < cuda_tex_vec.size(); i++)
+    {
+        cudaDestroyTextureObject(cuda_tex_vec[i]);
+        cudaFreeArray(dev_tex_arrs_vec[i]);
+    }
+
     // TODO: clean up any extra device memory you created
 
     checkCUDAError("pathtraceFree");
@@ -158,7 +203,7 @@ void pathtraceFree() {
 * motion blur - jitter rays "in time"
 * lens effect - jitter ray origin positions based on a lens
 */
-__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments)
+__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments, bool antiAliasing)
 {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -167,12 +212,12 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         float ry = 0.f;
         int index = x + (y * cam.resolution.x);
         PathSegment& segment = pathSegments[index];
-#if ANTIALIASING
-        thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
-        thrust::uniform_real_distribution<float> u(-0.5, 0.5);
-        rx = u(rng);
-        ry = u(rng);
-#endif // ANTIALIASING
+        if (antiAliasing) {
+            thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
+            thrust::uniform_real_distribution<float> u(-0.5, 0.5);
+            rx = u(rng);
+            ry = u(rng);
+        }
         segment.ray.origin = cam.position;
         segment.color = glm::vec3(0.f);
         segment.throughput = glm::vec3(1.f);
@@ -212,6 +257,7 @@ __global__ void computeIntersections(
         float t;
         glm::vec3 intersect_point;
         glm::vec3 normal;
+        glm::vec2 uv;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
 
@@ -235,6 +281,7 @@ __global__ void computeIntersections(
                 hit_geom_index = i;
                 intersect_point = tmp_intersect;
                 normal = tmp_normal;
+                uv = tmp_uv;
             }
         }
 
@@ -248,6 +295,7 @@ __global__ void computeIntersections(
             //The ray hits something
             intersections[path_index].t = t_min;
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
+            intersections[path_index].uv = uv;
             intersections[path_index].surfaceNormal = normal;
             intersections[path_index].pos = intersect_point;
             intersections[path_index].woW = -pathSegment.ray.direction;
@@ -274,7 +322,7 @@ __global__ void shadeMaterial(
             // Set up the RNG
             // LOOK: this is how you use thrust's RNG! Please look at
             // makeSeededRandomEngine as well.
-            thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
+            thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pSeg.remainingBounces);
             thrust::uniform_real_distribution<float> u01(0, 1);
 
             Material material = materials[intersection.materialId];
@@ -282,7 +330,7 @@ __global__ void shadeMaterial(
 
             // If the material indicates that the object was a light, "light" the ray
             //if (glm::length2(material.emissiveFactor) > 0.0f && dot(pSeg.ray.direction, intersection.surfaceNormal) < 0.f) {
-            if (glm::length2(material.emissiveFactor) > 0.0f ) {
+            if (glm::length2(material.emissiveFactor) > 0.0f) {
                 pSeg.color = pSeg.throughput * (materialColor * material.emissiveFactor);
                 pSeg.remainingBounces = 0;
             }
@@ -376,7 +424,7 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 
     // TODO: perform one iteration of path tracing
 
-    generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> > (cam, iter, traceDepth, dev_paths);
+    generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> > (cam, iter, traceDepth, dev_paths, hst_scene->settings.antiAliasing);
     checkCUDAError("generate camera ray");
 
     int depth = 0;

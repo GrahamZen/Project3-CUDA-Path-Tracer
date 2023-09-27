@@ -10,7 +10,7 @@ namespace fs = std::filesystem;
 
 std::ifstream findFile(const std::string& fileName) {
     fs::path currentPath = fs::current_path();
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 5; ++i) {
         fs::path filePath = currentPath / fileName;
         if (fs::exists(filePath)) {
             std::ifstream fileStream(filePath);
@@ -151,7 +151,7 @@ int Scene::loadScene()
     state = settings.defaultRenderState;
     geoms.clear();
     int num_mat = loadMaterial();
-
+    int num_tex = loadTexture();
     std::cout << num_mat << " materials loaded." << std::endl;
     const tinygltf::Scene& scene = model->scenes[model->defaultScene];
     for (size_t i = 0; i < scene.nodes.size(); i++)
@@ -202,6 +202,7 @@ void Scene::loadSettings() {
         camera.fov.y = renderStateData["camera"]["fovy"];
         computeCameraParams(camera);
 
+        settings.antiAliasing = renderStateData["antiAliasing"];
         renderState.iterations = renderStateData["iterations"];
         renderState.traceDepth = renderStateData["traceDepth"];
         renderState.imageName = renderStateData["imageName"];
@@ -288,8 +289,7 @@ Camera& Scene::computeCameraParams(Camera& camera)const
 bool Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 {
     std::cout << "Loading Camera ..." << std::endl;
-    Camera camera;
-    camera.resolution.y = height;
+    Camera camera = settings.defaultRenderState.camera;
     const tinygltf::Camera& gltfCamera = model->cameras[node.camera];
     if (node.translation.size() == 3)
         camera.position = glm::vec3(transform * glm::vec4(glm::make_vec3(node.translation.data()), 1.0f));
@@ -384,4 +384,28 @@ int Scene::loadMaterial() {
     }
 
     return static_cast<int>(materials.size());
+}
+
+bool Scene::loadTexture() {
+    for (int textureIndex = 0; textureIndex < model->textures.size(); textureIndex++) {
+        const tinygltf::Texture& texture = model->textures[textureIndex];
+
+        if (texture.source < 0 || texture.source >= model->images.size()) {
+            std::cerr << "Invalid image source for texture." << std::endl;
+            return false;
+        }
+
+        const tinygltf::Image& image = model->images[texture.source];
+
+        if (image.component != 3 && image.component != 4) {
+            std::cerr << "Unsupported number of components in image (must be 3 or 4)." << std::endl;
+            return false;
+        }
+        unsigned char* textureBuffer = nullptr;
+        textureBuffer = new unsigned char[image.image.size()];
+        std::memcpy(textureBuffer, image.image.data(), image.image.size());
+
+        textures.push_back({ textureIndex, image.width, image.height, image.component, textureBuffer, image.image.size() });
+    }
+    return true;
 }

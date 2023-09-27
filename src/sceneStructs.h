@@ -24,7 +24,7 @@ struct Ray {
 };
 
 __device__ static Ray SpawnRay(glm::vec3 pos, glm::vec3 wi) {
-    return Ray{ pos + wi * 0.01f, wi };
+    return Ray{ pos + wi * 0.001f, wi };
 }
 
 struct Geom
@@ -84,6 +84,15 @@ struct PbrMetallicRoughness {
         : baseColorFactor(glm::vec4{ 1. }) {}
     DEFAULT_METHODS(PbrMetallicRoughness)
         bool operator==(const PbrMetallicRoughness&) const;
+};
+
+struct Texture {
+    int id;
+    int width;
+    int height;
+    int channel;
+    unsigned char* data;
+    size_t size;
 };
 
 struct Material {
@@ -156,6 +165,7 @@ struct PathSegment {
     int pixelIndex;
     int remainingBounces;
     glm::vec3 throughput;
+    glm::vec2 uv;
 };
 
 // Use with a corresponding PathSegment to do:

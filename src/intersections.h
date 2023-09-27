@@ -62,9 +62,7 @@ __host__ __device__ float triangleIntersectionTest(Geom triangle, Ray r, glm::ve
     intersectionPoint = w * v0 + u * v1 + v * v2;
     uv = w * triangle.uv0 + u * triangle.uv1 + v * triangle.uv2;
     normal = glm::vec3(w * triangle.normal0 + u * triangle.normal1 + v * triangle.normal2);
-    if (glm::dot(r.direction, normal) >= 0)
-        normal = -normal;
-    normal = glm::normalize(multiplyMV(triangle.t.transform, glm::vec4(normal, 1.f)));
+    normal = glm::normalize(multiplyMV(triangle.t.invTranspose, glm::vec4(normal, 0.f)));
     return t;
 }
 

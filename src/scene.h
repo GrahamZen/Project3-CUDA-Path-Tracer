@@ -16,19 +16,19 @@ namespace tinygltf {
 
 class Scene {
 private:
-    tinygltf::Model* model;
     static PbrMetallicRoughness loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat);
     static void loadExtensions(Material& material, const tinygltf::ExtensionMap& extensionMap);
     Camera& computeCameraParams(Camera& camera)const;
     int loadMaterial();
+    bool loadTexture();
     int loadScene();
     void loadSettings();
     void traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& transforms);
     void loadNode(const tinygltf::Node& node);
     int loadGeom(const tinygltf::Node& node, const Geom::Transformation& transform);
     bool loadCamera(const tinygltf::Node&, const glm::mat4& transform);
+    tinygltf::Model* model;
     const int defaultMatId = 0;
-    const int height = 1000;
 public:
     struct Settings
     {
@@ -37,10 +37,12 @@ public:
         Material defaultMat;
         RenderState defaultRenderState;
         bool readFromFile;
+        bool antiAliasing;
     } settings;
     Scene(std::string filename);
     ~Scene();
 
+    std::vector<Texture> textures;
     std::vector<Geom> geoms;
     std::vector<Material> materials;
     std::vector<Camera> cameras;
