@@ -328,9 +328,6 @@ __device__ glm::vec3 computeAlbedo(const Material& mat, glm::vec3 nor)
     glm::vec3 albedo(1.f);
     if ((mat.type & (Material::Type::PLASTIC | Material::Type::DIFFUSE)) != 0)
         albedo = glm::vec3(mat.pbrMetallicRoughness.baseColorFactor);
-    else if (mat.type == Material::Type::DIELECTRIC) {
-        albedo = glm::vec3(mat.dielectric.specularColorFactor);
-    }
     else if (mat.type == Material::Type::UNKNOWN) {
         albedo = glm::vec3(0.f);
     }
@@ -403,7 +400,11 @@ __device__ glm::vec3 sample_f(const Material& mat, glm::vec3 nor, glm::vec3 woW,
     {
         return sample_f_rough_dieletric(computeAlbedo(mat, nor), nor, xi, wo, computeRoughness(mat, nor), mat.dielectric.eta, sample);
     }
-    else if (mat.type == Material::Type::METAL)
+    else if (mat.type == Material::Type::SPECULAR)
+    {
+        sample.pdf = 1.;
+        return sample_f_specular_refl(computeAlbedo(mat, nor), nor, wo, sample);
+    }    else if (mat.type == Material::Type::METAL)
     {
         sample.pdf = 1.;
         return sample_f_metal(computeAlbedo(mat, nor), nor, xi, mat.metal, wo, sample);

@@ -341,10 +341,11 @@ void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& ext
             material.dielectric.eta = extensionValue.Get("ior").Get<double>();
         }
         else if (extensionName == "KHR_materials_specular") {
-            material.type = Material::Type::DIELECTRIC;
-            material.dielectric.eta = extensionValue.Get("specularFactor").Get<double>();
+            material.type = Material::Type::SPECULAR;
+            material.dielectric.specularColorFactor = glm::vec3(extensionValue.Get("specularFactor").Get<double>());
         }
         else if (extensionName == "KHR_materials_transmission") {
+            material.type = Material::Type::DIELECTRIC;
         }
         else {
             std::cerr << extensionName << " not supported." << std::endl;
@@ -376,7 +377,9 @@ int Scene::loadMaterial() {
 
         if (gltfMaterial.extensions.size() != 0)
             loadExtensions(material, gltfMaterial.extensions);
-
+#ifdef DEBUG
+        std::cout << "Material " << i << ": " << material.type << std::endl;
+#endif
         materials.push_back(material);
     }
 

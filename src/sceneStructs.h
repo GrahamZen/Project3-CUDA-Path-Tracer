@@ -91,9 +91,10 @@ struct Material {
         UNKNOWN = 0,
         DIFFUSE = 1,
         DIELECTRIC = 1 << 1,
-        METAL = 1 << 2,
-        ROUGH_DIELECTRIC = 1 << 3,
-        PLASTIC = 1 << 4
+        SPECULAR = 1 << 2,
+        METAL = 1 << 3,
+        ROUGH_DIELECTRIC = 1 << 4,
+        PLASTIC = 1 << 5
     };
     uint32_t type = Type::DIFFUSE;
 
