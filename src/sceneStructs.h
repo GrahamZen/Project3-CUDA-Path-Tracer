@@ -41,7 +41,12 @@ struct Geom
 };
 
 struct TextureInfo {
-    int index;
+    int index{ -1 };
+    int width;
+    int height;
+    int channel;
+    cudaTextureObject_t cudaTexObj;
+    size_t size;
 };
 
 struct NormalTextureInfo {
@@ -86,15 +91,6 @@ struct PbrMetallicRoughness {
         bool operator==(const PbrMetallicRoughness&) const;
 };
 
-struct Texture {
-    int id;
-    int width;
-    int height;
-    int channel;
-    unsigned char* data;
-    size_t size;
-};
-
 struct Material {
     enum Type {
         UNKNOWN = 0,
@@ -103,11 +99,13 @@ struct Material {
         SPECULAR = 1 << 2,
         METAL = 1 << 3,
         ROUGH_DIELECTRIC = 1 << 4,
-        PLASTIC = 1 << 5
+        PLASTIC = 1 << 5,
+        LIGHT = 1 << 6
     };
     uint32_t type = Type::DIFFUSE;
 
     glm::vec3 emissiveFactor = glm::vec3(1.f);  // length 3. default [0, 0, 0]
+    float emissiveStrength = 1.f;
     // std::string alphaMode;               // default "OPAQUE"
     double alphaCutoff{ 0.5 };             // default 0.5
     bool doubleSided{ false };             // default false;

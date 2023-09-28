@@ -1,5 +1,6 @@
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtx/norm.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <iostream>
 #include <filesystem>
@@ -70,6 +71,12 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
     transforms.push_back(t);
 }
 
+Geom::Transformation& recomputeTransform(Geom::Transformation& t) {
+    t.inverseTransform = glm::inverse(t.transform);
+    t.invTranspose = glm::transpose(t.inverseTransform);
+    return t;
+}
+
 Scene::Scene(std::string filename)
 {
     loadSettings();
@@ -105,6 +112,11 @@ Scene::Scene(std::string filename)
 
 Scene::~Scene()
 {
+    for (int i = 0; i < cuda_tex_vec.size(); i++)
+    {
+        cudaDestroyTextureObject(cuda_tex_vec[i]);
+        cudaFreeArray(dev_tex_arrs_vec[i]);
+    }
     delete model;
 }
 
@@ -122,10 +134,10 @@ Geom::Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
 }
 
 void Scene::traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& transforms) {
-    if (node.camera != -1) {
+    if (node.camera >= 0) {
         loadCamera(node, evaluateTransform(transforms).transform);
     }
-    if (node.mesh != -1) {
+    if (node.mesh >= 0) {
         std::cout << loadGeom(node, evaluateTransform(transforms)) << " triangles loaded." << std::endl;
     }
     updateTransform(node, transforms);
@@ -150,8 +162,8 @@ int Scene::loadScene()
     RenderState& state = this->state;
     state = settings.defaultRenderState;
     geoms.clear();
-    int num_mat = loadMaterial();
     int num_tex = loadTexture();
+    int num_mat = loadMaterial();
     std::cout << num_mat << " materials loaded." << std::endl;
     const tinygltf::Scene& scene = model->scenes[model->defaultScene];
     for (size_t i = 0; i < scene.nodes.size(); i++)
@@ -233,40 +245,55 @@ void Scene::loadSettings() {
 
 int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
 {
-    if (node.mesh >= 0) {
-        const tinygltf::Mesh& mesh = model->meshes[node.mesh];
+    const tinygltf::Mesh& mesh = model->meshes[node.mesh];
 
-        for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex) {
-            const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
+    glm::vec3 translation(0.0f, 0.0f, 0.0f);
+    glm::quat rotation;
+    glm::vec3 scale(1.0f, 1.0f, 1.0f);
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
 
-            if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
-                int materialId = materials.empty() ? defaultMatId : primitive.material;
+    if (!node.translation.empty() || !node.rotation.empty() || !node.scale.empty()) {
+        if (!node.translation.empty())
+            translation = glm::make_vec3(node.translation.data());
+        if (!node.rotation.empty())
+            rotation = glm::make_quat(node.rotation.data());
+        if (!node.scale.empty())
+            scale = glm::make_vec3(node.scale.data());
+        modelMatrix = glm::translate(glm::mat4(1.0f), translation) * glm::mat4_cast(rotation) * glm::scale(glm::mat4(1.0f), scale);
+    }
+    Geom::Transformation modelTransformation;
+    modelTransformation.transform = t.transform * modelMatrix;
 
-                auto [positions, posCnt] = getPrimitiveBuffer<float>(model, primitive, "POSITION");
-                auto [normals, norCnt] = getPrimitiveBuffer<float>(model, primitive, "NORMAL");
-                auto [uvs, uvCnt] = getPrimitiveBuffer<float>(model, primitive, "TEXCOORD_0");
-                auto [indices, indCnt] = getIndexBuffer(model, primitive);
+    for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex) {
+        const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
 
-                for (size_t i = 0; i < indCnt; i += 3) {
-                    const size_t v0Id = indices[i];
-                    const size_t v1Id = indices[i + 1];
-                    const size_t v2Id = indices[i + 2];
-                    Geom triangle{ t,materialId,
-                        glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]),
-                        glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]),
-                        glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]) };
-                    if (normals) {
-                        triangle.normal0 = glm::vec3(normals[v0Id * 3], normals[v0Id * 3 + 1], normals[v0Id * 3 + 2]);
-                        triangle.normal1 = glm::vec3(normals[v1Id * 3], normals[v1Id * 3 + 1], normals[v1Id * 3 + 2]);
-                        triangle.normal2 = glm::vec3(normals[v2Id * 3], normals[v2Id * 3 + 1], normals[v2Id * 3 + 2]);
-                    }
-                    if (uvs) {
-                        triangle.uv0 = glm::vec2(normals[v0Id * 2], normals[v0Id * 2 + 1]);
-                        triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
-                        triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
-                    }
-                    geoms.push_back(triangle);
+        if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
+            int materialId = materials.empty() ? defaultMatId : primitive.material;
+
+            auto [positions, posCnt] = getPrimitiveBuffer<float>(model, primitive, "POSITION");
+            auto [normals, norCnt] = getPrimitiveBuffer<float>(model, primitive, "NORMAL");
+            auto [uvs, uvCnt] = getPrimitiveBuffer<float>(model, primitive, "TEXCOORD_0");
+            auto [indices, indCnt] = getIndexBuffer(model, primitive);
+
+            for (size_t i = 0; i < indCnt; i += 3) {
+                const size_t v0Id = indices[i];
+                const size_t v1Id = indices[i + 1];
+                const size_t v2Id = indices[i + 2];
+                Geom triangle{ recomputeTransform(modelTransformation), materialId,
+                    glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]),
+                    glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]),
+                    glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]) };
+                if (normals) {
+                    triangle.normal0 = glm::vec3(normals[v0Id * 3], normals[v0Id * 3 + 1], normals[v0Id * 3 + 2]);
+                    triangle.normal1 = glm::vec3(normals[v1Id * 3], normals[v1Id * 3 + 1], normals[v1Id * 3 + 2]);
+                    triangle.normal2 = glm::vec3(normals[v2Id * 3], normals[v2Id * 3 + 1], normals[v2Id * 3 + 2]);
                 }
+                if (uvs) {
+                    triangle.uv0 = glm::vec2(normals[v0Id * 2], normals[v0Id * 2 + 1]);
+                    triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
+                    triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
+                }
+                geoms.push_back(triangle);
             }
         }
     }
@@ -320,10 +347,11 @@ bool Scene::loadCamera(const tinygltf::Node& node, const glm::mat4& transform)
 PbrMetallicRoughness Scene::loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat)
 {
     PbrMetallicRoughness result;
-    for (size_t i = 0; i < pbrMat.baseColorFactor.size(); ++i) {
-        result.baseColorFactor[i] = pbrMat.baseColorFactor[i];
+    result.baseColorFactor = glm::make_vec4(pbrMat.baseColorFactor.data());
+    int textureIndex = pbrMat.baseColorTexture.index;
+    if (textureIndex >= 0) {
+        result.baseColorTexture = textures[textureIndex];
     }
-    result.baseColorTexture.index = pbrMat.baseColorTexture.index;
     result.metallicFactor = pbrMat.metallicFactor;
     result.roughnessFactor = pbrMat.roughnessFactor;
     result.metallicRoughnessTexture.index = pbrMat.metallicRoughnessTexture.index;
@@ -347,6 +375,9 @@ void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& ext
         else if (extensionName == "KHR_materials_transmission") {
             material.type = Material::Type::DIELECTRIC;
         }
+        else if (extensionName == "KHR_materials_emissive_strength") {
+            material.emissiveStrength = extensionValue.Get("emissiveStrength").Get<double>();
+        }
         else {
             std::cerr << extensionName << " not supported." << std::endl;
         }
@@ -365,6 +396,8 @@ int Scene::loadMaterial() {
 
         const auto& emissiveFactor = gltfMaterial.emissiveFactor;
         material.emissiveFactor = glm::make_vec3(emissiveFactor.data());
+        if (glm::length2(material.emissiveFactor) > 0.f)
+            material.type = Material::Type::LIGHT;
         material.alphaCutoff = gltfMaterial.alphaCutoff;
         material.doubleSided = gltfMaterial.doubleSided;
 
@@ -387,7 +420,11 @@ int Scene::loadMaterial() {
 }
 
 bool Scene::loadTexture() {
-    for (int textureIndex = 0; textureIndex < model->textures.size(); textureIndex++) {
+    int numTextures = model->textures.size();
+    dev_tex_arrs_vec.resize(numTextures);
+    cuda_tex_vec.resize(numTextures);
+
+    for (int textureIndex = 0; textureIndex < numTextures; textureIndex++) {
         const tinygltf::Texture& texture = model->textures[textureIndex];
 
         if (texture.source < 0 || texture.source >= model->images.size()) {
@@ -401,11 +438,50 @@ bool Scene::loadTexture() {
             std::cerr << "Unsupported number of components in image (must be 3 or 4)." << std::endl;
             return false;
         }
-        unsigned char* textureBuffer = nullptr;
-        textureBuffer = new unsigned char[image.image.size()];
-        std::memcpy(textureBuffer, image.image.data(), image.image.size());
 
-        textures.push_back({ textureIndex, image.width, image.height, image.component, textureBuffer, image.image.size() });
+        textures.push_back(crateTextureObj(textureIndex, image));
     }
     return true;
+}
+
+__host__ TextureInfo Scene::crateTextureObj(int textureIndex, const tinygltf::Image& image) {
+    int width = image.width;
+    int height = image.height;
+    int component = image.component;
+
+    // Allocate CUDA array in device memory
+    cudaChannelFormatDesc desc = cudaCreateChannelDesc<uchar4>();
+    cudaArray_t cuArray;
+    cudaMallocArray(&cuArray, &desc, width, height);
+
+    // Copy image data to CUDA array
+    cudaMemcpyToArray(cuArray, 0, 0, image.image.data(), image.image.size() * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    // Specify resource descriptor
+    struct cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeArray;
+    resDesc.res.array.array = cuArray;
+
+    // Specify texture object parameters
+    struct cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeWrap;
+    texDesc.addressMode[1] = cudaAddressModeWrap;
+    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.readMode = cudaReadModeNormalizedFloat;
+    texDesc.sRGB = 1;
+    texDesc.normalizedCoords = 1;
+
+    // Create CUDA texture object
+    cudaTextureObject_t texObj = 0;
+    cudaCreateTextureObject(&texObj, &resDesc, &texDesc, NULL);
+
+    // Store CUDA array and texture object
+    dev_tex_arrs_vec[textureIndex] = cuArray;
+    cuda_tex_vec[textureIndex] = texObj;
+
+    cudaCreateTextureObject(&cuda_tex_vec[textureIndex], &resDesc, &texDesc, NULL);
+    checkCUDAError("crateTextureObj");
+    return TextureInfo{ textureIndex, width, height, image.component, cuda_tex_vec[textureIndex], image.image.size() };
 }

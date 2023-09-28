@@ -17,27 +17,7 @@
 #include "material.h"
 
 #define ERRORCHECK 1
-#define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-#define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
-void checkCUDAErrorFn(const char* msg, const char* file, int line) {
-#if ERRORCHECK
-    cudaDeviceSynchronize();
-    cudaError_t err = cudaGetLastError();
-    if (cudaSuccess == err) {
-        return;
-    }
 
-    fprintf(stderr, "CUDA error");
-    if (file) {
-        fprintf(stderr, " (%s:%d)", file, line);
-    }
-    fprintf(stderr, ": %s: %s\n", msg, cudaGetErrorString(err));
-#  ifdef _WIN32
-    getchar();
-#  endif
-    exit(EXIT_FAILURE);
-#endif
-}
 
 template<typename T>
 void checkCudaMem(T* d_ptr, int size) {
@@ -74,9 +54,6 @@ static GuiDataContainer* guiData = nullptr;
 static glm::vec3* dev_image = nullptr;
 static Geom* dev_geoms = nullptr;
 static Material* dev_materials = nullptr;
-static std::vector<cudaArray_t> dev_tex_arrs_vec;
-static cudaTextureObject_t* dev_cuda_tex_objs = nullptr;
-static std::vector<cudaTextureObject_t> cuda_tex_vec;
 static PathSegment* dev_paths = nullptr;
 static PathSegment* dev_paths_terminated = nullptr;
 static int* dev_materialIsectIndices = nullptr;
@@ -95,33 +72,6 @@ void InitDataContainer(GuiDataContainer* imGuiData)
 {
     guiData = imGuiData;
 }
-
-__host__ void textureInit(const Texture& tex, int i) {
-    int width = tex.width;
-    int height = tex.height;
-    cudaChannelFormatDesc desc = cudaCreateChannelDesc<uchar4>();
-    cudaMallocArray(&dev_tex_arrs_vec[i], &desc, width, height);
-    cudaMemcpyToArray(dev_tex_arrs_vec[i], 0, 0, tex.data, width * height * tex.channel * sizeof(unsigned char), cudaMemcpyHostToDevice);
-
-    struct cudaResourceDesc resDesc;
-    memset(&resDesc, 0, sizeof(resDesc));
-    resDesc.resType = cudaResourceTypeArray;
-    resDesc.res.array.array = dev_tex_arrs_vec[i];
-
-    struct cudaTextureDesc texDesc;
-    memset(&texDesc, 0, sizeof(texDesc));
-    texDesc.addressMode[0] = cudaAddressModeWrap;
-    texDesc.addressMode[1] = cudaAddressModeWrap;
-    texDesc.filterMode = cudaFilterModeLinear;
-    texDesc.readMode = cudaReadModeNormalizedFloat;
-    texDesc.sRGB = 1;
-    texDesc.normalizedCoords = 1;
-
-    cudaCreateTextureObject(&cuda_tex_vec[i], &resDesc, &texDesc, NULL);
-    cudaMemcpy(dev_cuda_tex_objs + i, &cuda_tex_vec[i], sizeof(cudaTextureObject_t), cudaMemcpyHostToDevice);
-    checkCUDAError("textureInit failed");
-}
-
 
 void pathtraceInit(Scene* scene) {
     hst_scene = scene;
@@ -159,14 +109,6 @@ void pathtraceInit(Scene* scene) {
     dev_paths_thrust = thrust::device_ptr<PathSegment>(dev_paths);
     dev_paths_terminated_thrust = thrust::device_ptr<PathSegment>(dev_paths_terminated);
 
-    dev_tex_arrs_vec.resize(scene->textures.size());
-    cuda_tex_vec.resize(scene->textures.size());
-
-    for (int i = 0; i < scene->textures.size(); i++)
-    {
-        textureInit(scene->textures[i], i);
-    }
-
     // TODO: initialize any extra device memeory you need
 
     checkCUDAError("pathtraceInit");
@@ -183,11 +125,6 @@ void pathtraceFree() {
     cudaFree(dev_materialIsectIndicesCache);
     cudaFree(dev_materialSegIndices);
     cudaFree(dev_intersections_cache);
-    for (int i = 0; i < cuda_tex_vec.size(); i++)
-    {
-        cudaDestroyTextureObject(cuda_tex_vec[i]);
-        cudaFreeArray(dev_tex_arrs_vec[i]);
-    }
 
     // TODO: clean up any extra device memory you created
 
@@ -325,12 +262,14 @@ __global__ void shadeMaterial(
             thrust::uniform_real_distribution<float> u01(0, 1);
 
             Material material = materials[intersection.materialId];
-            glm::vec3 materialColor{ material.pbrMetallicRoughness.baseColorFactor };
 
             // If the material indicates that the object was a light, "light" the ray
             //if (glm::length2(material.emissiveFactor) > 0.0f && dot(pSeg.ray.direction, intersection.surfaceNormal) < 0.f) {
-            if (glm::length2(material.emissiveFactor) > 0.0f) {
-                pSeg.color = pSeg.throughput * (materialColor * material.emissiveFactor);
+            if (material.type == Material::Type::LIGHT) {
+                if (material.emissiveTexture.index > 0)
+                    pSeg.color = pSeg.throughput * (sampleTexture(material.emissiveTexture.cudaTexObj, intersection.uv) * material.emissiveFactor * material.emissiveStrength);
+                else
+                    pSeg.color = pSeg.throughput * (glm::vec3(material.pbrMetallicRoughness.baseColorFactor) * material.emissiveFactor * material.emissiveStrength);
                 pSeg.remainingBounces = 0;
             }
             // Otherwise, do some pseudo-lighting computation. This is actually more
@@ -338,7 +277,7 @@ __global__ void shadeMaterial(
             // TODO: replace this! you should be able to start with basically a one-liner
             else {
                 BsdfSample sample;
-                auto bsdf = sample_f(material, intersection.surfaceNormal, intersection.woW, glm::vec3(u01(rng), u01(rng), u01(rng)), sample);
+                auto bsdf = sample_f(material, intersection.surfaceNormal, intersection.uv, intersection.woW, glm::vec3(u01(rng), u01(rng), u01(rng)), sample);
                 if (sample.pdf <= 0) {
                     pSeg.remainingBounces = 0;
                     pSeg.pixelIndex = -1;

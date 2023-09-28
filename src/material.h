@@ -2,9 +2,15 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtx/intersect.hpp>
+#include <cuda_runtime.h>
 
 #include "sceneStructs.h"
 #include "utilities.h"
+
+__device__ __inline__ glm::vec3 sampleTexture(cudaTextureObject_t tex, glm::vec2 const& uv) {
+    auto color = tex2D<float4>(tex, uv.x, uv.y);
+    return glm::vec3(color.x, color.y, color.z);
+}
 
 struct BsdfSample
 {
@@ -323,11 +329,17 @@ __device__ glm::vec3 sample_f_rough_dieletric(glm::vec3 albedo, glm::vec3 nor, g
     }
 }
 
-__device__ glm::vec3 computeAlbedo(const Material& mat, glm::vec3 nor)
+__device__ glm::vec3 computeAlbedo(const Material& mat, glm::vec3 nor, glm::vec2 uv)
 {
     glm::vec3 albedo(1.f);
     if ((mat.type & (Material::Type::PLASTIC | Material::Type::DIFFUSE)) != 0)
-        albedo = glm::vec3(mat.pbrMetallicRoughness.baseColorFactor);
+    {
+        auto& tex = mat.pbrMetallicRoughness.baseColorTexture;
+        if (tex.index != -1)
+            albedo = sampleTexture(tex.cudaTexObj, uv);
+        else
+            albedo = glm::vec3(mat.pbrMetallicRoughness.baseColorFactor);
+    }
     else if (mat.type == Material::Type::UNKNOWN) {
         albedo = glm::vec3(0.f);
     }
@@ -393,30 +405,31 @@ __device__ glm::vec3 f(const Material& mat, glm::vec3 nor, glm::vec3 woW, glm::v
     return glm::vec3(1, 0, 1);
 }
 
-__device__ glm::vec3 sample_f(const Material& mat, glm::vec3 nor, glm::vec3 woW, glm::vec3 xi, BsdfSample& sample)
+__device__ glm::vec3 sample_f(const Material& mat, glm::vec3 nor, glm::vec2 uv, glm::vec3 woW, glm::vec3 xi, BsdfSample& sample)
 {
     glm::vec3 wo = WorldToLocal(nor) * woW;
     if (mat.type == Material::Type::ROUGH_DIELECTRIC)
     {
-        return sample_f_rough_dieletric(computeAlbedo(mat, nor), nor, xi, wo, computeRoughness(mat, nor), mat.dielectric.eta, sample);
+        return sample_f_rough_dieletric(computeAlbedo(mat, nor, uv), nor, xi, wo, computeRoughness(mat, nor), mat.dielectric.eta, sample);
     }
     else if (mat.type == Material::Type::SPECULAR)
     {
         sample.pdf = 1.;
-        return sample_f_specular_refl(computeAlbedo(mat, nor), nor, wo, sample);
-    }    else if (mat.type == Material::Type::METAL)
+        return sample_f_specular_refl(computeAlbedo(mat, nor, uv), nor, wo, sample);
+    }
+    else if (mat.type == Material::Type::METAL)
     {
         sample.pdf = 1.;
-        return sample_f_metal(computeAlbedo(mat, nor), nor, xi, mat.metal, wo, sample);
+        return sample_f_metal(computeAlbedo(mat, nor, uv), nor, xi, mat.metal, wo, sample);
     }
     else if (mat.type == Material::Type::DIELECTRIC)
     {
         sample.pdf = 1.;
-        return sample_f_glass(computeAlbedo(mat, nor), nor, xi, mat.dielectric.eta, wo, sample);
+        return sample_f_glass(computeAlbedo(mat, nor, uv), nor, xi, mat.dielectric.eta, wo, sample);
     }
     else if (mat.type == Material::Type::DIFFUSE)
     {
-        return sample_f_diffuse(computeAlbedo(mat, nor), xi, nor, sample);
+        return sample_f_diffuse(computeAlbedo(mat, nor, uv), xi, nor, sample);
     }
     sample.pdf = -1.f;
     return glm::vec3(0.f);

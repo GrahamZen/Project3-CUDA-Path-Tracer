@@ -16,8 +16,8 @@ namespace tinygltf {
 
 class Scene {
 private:
-    static PbrMetallicRoughness loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat);
     static void loadExtensions(Material& material, const tinygltf::ExtensionMap& extensionMap);
+    PbrMetallicRoughness loadPbrMetallicRoughness(const tinygltf::PbrMetallicRoughness& pbrMat);
     Camera& computeCameraParams(Camera& camera)const;
     int loadMaterial();
     bool loadTexture();
@@ -27,12 +27,15 @@ private:
     void loadNode(const tinygltf::Node& node);
     int loadGeom(const tinygltf::Node& node, const Geom::Transformation& transform);
     bool loadCamera(const tinygltf::Node&, const glm::mat4& transform);
+    TextureInfo crateTextureObj(int textureIndex, const tinygltf::Image& image);
+    std::vector<cudaArray_t> dev_tex_arrs_vec;
     tinygltf::Model* model;
     const int defaultMatId = 0;
 public:
     struct Settings
     {
         const std::string filename = "Settings.json";
+        std::string envMapFilename;
         std::string gltfPath;
         Material defaultMat;
         RenderState defaultRenderState;
@@ -42,7 +45,8 @@ public:
     Scene(std::string filename);
     ~Scene();
 
-    std::vector<Texture> textures;
+    std::vector<cudaTextureObject_t> cuda_tex_vec;
+    std::vector<TextureInfo> textures;
     std::vector<Geom> geoms;
     std::vector<Material> materials;
     std::vector<Camera> cameras;
