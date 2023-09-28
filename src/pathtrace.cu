@@ -16,7 +16,6 @@
 #include "interactions.h"
 #include "material.h"
 
-#define ANTIALIASING 0
 #define ERRORCHECK 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -213,7 +212,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         int index = x + (y * cam.resolution.x);
         PathSegment& segment = pathSegments[index];
         if (antiAliasing) {
-            thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
+            thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, pathSegments->remainingBounces);
             thrust::uniform_real_distribution<float> u(-0.5, 0.5);
             rx = u(rng);
             ry = u(rng);

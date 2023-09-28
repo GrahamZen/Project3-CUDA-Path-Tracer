@@ -411,6 +411,7 @@ __device__ glm::vec3 sample_f(const Material& mat, glm::vec3 nor, glm::vec3 woW,
     }
     else if (mat.type == Material::Type::DIELECTRIC)
     {
+        sample.pdf = 1.;
         return sample_f_glass(computeAlbedo(mat, nor), nor, xi, mat.dielectric.eta, wo, sample);
     }
     else if (mat.type == Material::Type::DIFFUSE)
