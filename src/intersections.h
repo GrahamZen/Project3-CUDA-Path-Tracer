@@ -35,7 +35,7 @@ __host__ __device__ glm::vec3 multiplyMV(const glm::mat4& m, const glm::vec4& v)
     return glm::vec3(m * v);
 }
 
-__host__ __device__ float triangleIntersectionTest(Geom triangle, Ray r, glm::vec3& intersectionPoint, glm::vec3& normal, glm::vec2& uv)
+__host__ __device__ float triangleIntersectionTest(TriangleDetail triangle, Ray r, glm::vec3& intersectionPoint, glm::vec3& normal, glm::vec2& uv)
 {
     glm::vec3 v0 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v0, 1.f));
     glm::vec3 v1 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v1, 1.f));

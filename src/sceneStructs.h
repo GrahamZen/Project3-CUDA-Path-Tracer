@@ -27,13 +27,20 @@ __device__ static Ray SpawnRay(glm::vec3 pos, glm::vec3 wi) {
     return Ray{ pos + wi * 0.001f, wi };
 }
 
-struct Geom
-{
-    struct Transformation {
-        glm::mat4 transform;
-        glm::mat4 inverseTransform;
-        glm::mat4 invTranspose;
-    }t;
+struct Transformation {
+    glm::mat4 transform;
+    glm::mat4 inverseTransform;
+    glm::mat4 invTranspose;
+};
+
+struct TriangleDetail {
+    TriangleDetail(Transformation t, int materialid, glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
+        glm::vec3 normal0, glm::vec3 normal1, glm::vec3 normal2,
+        glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2)
+        : t(t), materialid(materialid), v0(v0), v1(v1), v2(v2),
+        normal0(normal0), normal1(normal1), normal2(normal2),
+        uv0(uv0), uv1(uv1), uv2(uv2) {}
+    Transformation t;
     int materialid;
     glm::vec3 v0, v1, v2;
     glm::vec3 normal0, normal1, normal2;

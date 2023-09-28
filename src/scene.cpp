@@ -71,7 +71,7 @@ void updateTransform(const tinygltf::Node& node, std::vector<glm::mat4>& transfo
     transforms.push_back(t);
 }
 
-Geom::Transformation& recomputeTransform(Geom::Transformation& t) {
+Transformation& recomputeTransform(Transformation& t) {
     t.inverseTransform = glm::inverse(t.transform);
     t.invTranspose = glm::transpose(t.inverseTransform);
     return t;
@@ -121,8 +121,8 @@ Scene::~Scene()
     delete model;
 }
 
-Geom::Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
-    Geom::Transformation t;
+Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
+    Transformation t;
     t.transform = glm::mat4(1.0f);
     t.inverseTransform = glm::mat4(1.0f);
     t.invTranspose = glm::mat4(1.0f);
@@ -139,7 +139,7 @@ void Scene::traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& tra
         loadCamera(node, evaluateTransform(transforms).transform);
     }
     if (node.mesh >= 0) {
-        std::cout << loadGeom(node, evaluateTransform(transforms)) << " triangles loaded." << std::endl;
+        meshes.emplace_back(node, evaluateTransform(transforms), this);
     }
     updateTransform(node, transforms);
     for (int childIndex : node.children) {
@@ -184,15 +184,32 @@ void Scene::loadEnvMap()
     int width, height, numComponents;
     stbi_set_flip_vertically_on_load(true);
     float* hdrData = stbi_loadf(settings.envMapFilename.c_str(), &width, &height, &numComponents, 0);
+    float* hdrDataPadded = nullptr;
+    if (numComponents != 4)
+    {
+        std::cerr << "number of components is not 4, padded." << std::endl;
+        hdrDataPadded = new float[width * height * 4];
+        for (size_t i = 0; i < width * height; i++)
+        {
+            hdrDataPadded[i * 4] = hdrData[i * 3];
+            hdrDataPadded[i * 4 + 1] = hdrData[i * 3 + 1];
+            hdrDataPadded[i * 4 + 2] = hdrData[i * 3 + 2];
+            hdrDataPadded[i * 4 + 3] = 1.0f;
+        }
+        stbi_image_free(hdrData);
+    }
+    else {
+        hdrDataPadded = hdrData;
+        numComponents = 4;
+    }
 
-    if (!hdrData) {
+    if (!hdrDataPadded) {
         std::cerr << "Error loading environment map: " << settings.envMapFilename << std::endl;
         return;
     }
     int textureIndex = textures.size();
 
-    envMapTexture = createTextureObj(textureIndex, width, height, numComponents, hdrData, width * height * numComponents);
-    stbi_image_free(hdrData);
+    envMapTexture = createTextureObj(textureIndex, width, height, numComponents, hdrDataPadded, width * height * numComponents);
 }
 
 void Scene::loadSettings() {
@@ -262,8 +279,9 @@ void Scene::loadSettings() {
     }
 }
 
-int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
+Scene::Mesh::Mesh(const tinygltf::Node& node, const Transformation& transform, Scene* s) :scene(s)
 {
+    tinygltf::Model* model = s->model;
     const tinygltf::Mesh& mesh = model->meshes[node.mesh];
 
     glm::vec3 translation(0.0f, 0.0f, 0.0f);
@@ -280,43 +298,48 @@ int Scene::loadGeom(const tinygltf::Node& node, const Geom::Transformation& t)
             scale = glm::make_vec3(node.scale.data());
         modelMatrix = glm::translate(glm::mat4(1.0f), translation) * glm::mat4_cast(rotation) * glm::scale(glm::mat4(1.0f), scale);
     }
-    Geom::Transformation modelTransformation;
-    modelTransformation.transform = t.transform * modelMatrix;
-
+    t.transform = transform.transform * modelMatrix;
+    recomputeTransform(t);
+    std::vector<Primitive>prims;
     for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex) {
         const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
-
         if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
-            int materialId = materials.empty() ? defaultMatId : primitive.material;
-
-            auto [positions, posCnt] = getPrimitiveBuffer<float>(model, primitive, "POSITION");
-            auto [normals, norCnt] = getPrimitiveBuffer<float>(model, primitive, "NORMAL");
-            auto [uvs, uvCnt] = getPrimitiveBuffer<float>(model, primitive, "TEXCOORD_0");
-            auto [indices, indCnt] = getIndexBuffer(model, primitive);
-
-            for (size_t i = 0; i < indCnt; i += 3) {
-                const size_t v0Id = indices[i];
-                const size_t v1Id = indices[i + 1];
-                const size_t v2Id = indices[i + 2];
-                Geom triangle{ recomputeTransform(modelTransformation), materialId,
-                    glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]),
-                    glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]),
-                    glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]) };
-                if (normals) {
-                    triangle.normal0 = glm::vec3(normals[v0Id * 3], normals[v0Id * 3 + 1], normals[v0Id * 3 + 2]);
-                    triangle.normal1 = glm::vec3(normals[v1Id * 3], normals[v1Id * 3 + 1], normals[v1Id * 3 + 2]);
-                    triangle.normal2 = glm::vec3(normals[v2Id * 3], normals[v2Id * 3 + 1], normals[v2Id * 3 + 2]);
-                }
-                if (uvs) {
-                    triangle.uv0 = glm::vec2(normals[v0Id * 2], normals[v0Id * 2 + 1]);
-                    triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
-                    triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
-                }
-                geoms.push_back(triangle);
-            }
+            prims.emplace_back(primitive, t, s);
         }
     }
-    return geoms.size();
+}
+
+
+Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transformation& t, Scene* s) :scene(s)
+{
+    tinygltf::Model* model = s->model;
+    auto [positions, posCnt] = getPrimitiveBuffer<float>(model, primitive, "POSITION");
+    auto [normals, norCnt] = getPrimitiveBuffer<float>(model, primitive, "NORMAL");
+    auto [uvs, uvCnt] = getPrimitiveBuffer<float>(model, primitive, "TEXCOORD_0");
+    auto [indices, indCnt] = getIndexBuffer(model, primitive);
+    materialid = scene->materials.empty() ? scene->defaultMatId : primitive.material;
+
+    for (size_t i = 0; i < indCnt; i += 3) {
+        const size_t v0Id = indices[i];
+        const size_t v1Id = indices[i + 1];
+        const size_t v2Id = indices[i + 2];
+        Triangle triangle{
+            glm::vec3(positions[v0Id * 3], positions[v0Id * 3 + 1], positions[v0Id * 3 + 2]),
+            glm::vec3(positions[v1Id * 3], positions[v1Id * 3 + 1], positions[v1Id * 3 + 2]),
+            glm::vec3(positions[v2Id * 3], positions[v2Id * 3 + 1], positions[v2Id * 3 + 2]) };
+        if (normals) {
+            triangle.normal0 = glm::vec3(normals[v0Id * 3], normals[v0Id * 3 + 1], normals[v0Id * 3 + 2]);
+            triangle.normal1 = glm::vec3(normals[v1Id * 3], normals[v1Id * 3 + 1], normals[v1Id * 3 + 2]);
+            triangle.normal2 = glm::vec3(normals[v2Id * 3], normals[v2Id * 3 + 1], normals[v2Id * 3 + 2]);
+        }
+        if (uvs) {
+            triangle.uv0 = glm::vec2(normals[v0Id * 2], normals[v0Id * 2 + 1]);
+            triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
+            triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
+        }
+        tris.push_back(triangle);
+        s->geoms.emplace_back(t, materialid, triangle.v0, triangle.v1, triangle.v2, triangle.normal0, triangle.normal1, triangle.normal2, triangle.uv0, triangle.uv1, triangle.uv2);
+    }
 }
 
 Camera& Scene::computeCameraParams(Camera& camera)const
@@ -436,7 +459,7 @@ int Scene::loadMaterial() {
     }
 
     return static_cast<int>(materials.size());
-    }
+}
 
 bool Scene::loadTexture() {
     int numTextures = model->textures.size();

@@ -52,7 +52,7 @@ __global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution,
 static Scene* hst_scene = nullptr;
 static GuiDataContainer* guiData = nullptr;
 static glm::vec3* dev_image = nullptr;
-static Geom* dev_geoms = nullptr;
+static TriangleDetail* dev_geoms = nullptr;
 static Material* dev_materials = nullptr;
 static PathSegment* dev_paths = nullptr;
 static PathSegment* dev_paths_terminated = nullptr;
@@ -85,8 +85,8 @@ void pathtraceInit(Scene* scene) {
     cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
     cudaMalloc(&dev_paths_terminated, pixelcount * sizeof(PathSegment));
 
-    cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
-    cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
+    cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(TriangleDetail));
+    cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(TriangleDetail), cudaMemcpyHostToDevice);
 
     cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
     cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
@@ -177,7 +177,7 @@ __global__ void computeIntersections(
     int depth
     , int num_paths
     , PathSegment* pathSegments
-    , Geom* geoms
+    , TriangleDetail* geoms
     , int geoms_size
     , ShadeableIntersection* intersections
     , bool sortByMaterial,
@@ -205,7 +205,7 @@ __global__ void computeIntersections(
 
         for (int i = 0; i < geoms_size; i++)
         {
-            Geom& tri = geoms[i];
+            TriangleDetail& tri = geoms[i];
             t = triangleIntersectionTest(tri, pathSegment.ray, tmp_intersect, tmp_normal, tmp_uv);
             // TODO: add more intersection tests here... triangle? metaball? CSG?
 
@@ -296,7 +296,7 @@ __global__ void shadeMaterial(
             // used for opacity, in which case they can indicate "no opacity".
             // This can be useful for post-processing and image compositing.
         }
-        else if (enableEnvMap && depth == 0) {
+        else if (enableEnvMap) {
             pSeg.color += pSeg.throughput * sampleTexture(envMap, sampleSphericalMap(pSeg.ray.direction));
             pSeg.remainingBounces = 0;
         }
