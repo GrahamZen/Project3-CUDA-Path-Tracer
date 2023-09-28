@@ -35,7 +35,7 @@ __host__ __device__ glm::vec3 multiplyMV(const glm::mat4& m, const glm::vec4& v)
     return glm::vec3(m * v);
 }
 
-__host__ __device__ float triangleIntersectionTest(TriangleDetail triangle, Ray r, glm::vec3& intersectionPoint, glm::vec3& normal, glm::vec2& uv)
+__host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray r)
 {
     glm::vec3 v0 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v0, 1.f));
     glm::vec3 v1 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v1, 1.f));
@@ -46,24 +46,19 @@ __host__ __device__ float triangleIntersectionTest(TriangleDetail triangle, Ray 
     glm::vec3 pvec = glm::cross(r.direction, v0v2);
     float det = dot(v0v1, pvec);
     if (fabs(det) < 1e-5)
-        return -1;
+        return { -1,0,0 };
     glm::vec3 qvec = glm::cross(tvec, v0v1);
     float invDet = 1.0 / det;
     float t = dot(qvec, v0v2) * invDet;
     float t_min = -1e38f;
     float t_max = 1e38f;
     if (t >= t_max || t <= t_min)
-        return -1;
+        return { -1,0,0 };
     float u = dot(tvec, pvec) * invDet;
     float v = dot(r.direction, qvec) * invDet;
     if (v < 0 || u + v > 1 || u < 0 || u > 1)
-        return -1;
-    float w = 1 - u - v;
-    intersectionPoint = w * v0 + u * v1 + v * v2;
-    uv = w * triangle.uv0 + u * triangle.uv1 + v * triangle.uv2;
-    normal = glm::vec3(w * triangle.normal0 + u * triangle.normal1 + v * triangle.normal2);
-    normal = glm::normalize(multiplyMV(triangle.t.invTranspose, glm::vec4(normal, 0.f)));
-    return t;
+        return { -1,0,0 };
+    return { t, 1 - u - v, u };
 }
 
 __host__ __device__

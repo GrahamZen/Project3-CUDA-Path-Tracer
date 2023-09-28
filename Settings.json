@@ -1,12 +1,12 @@
 {
     "GLTF": {
         "from file": true,
-        "path": "D:/OneDrive/GitHub/Upenn/CIS_5650/Project3-CUDA-Path-Tracer/scenes/cornell_box/scene1.gltf"
+        "path": "D:/OneDrive/GitHub/Upenn/CIS_5650/Project3-CUDA-Path-Tracer/scenes/cornell_box/scene2.gltf"
     },
     "RenderState": {
         "camera": {
             "aspect ratio": 1,
-            "screen height": 1000,
+            "screen height": 1200,
             "position": [0, 0, 2],
             "lookAt": [0, 1, 0],
             "view": [0, 0, -1],
@@ -15,7 +15,8 @@
         },
         "iterations": 5000,
         "traceDepth": 8,
-        "imageName": "output.png"
+        "imageName": "output.png",
+        "antiAliasing": false
     },
     "Materials": [
         {
@@ -29,5 +30,9 @@
                 "roughnessFactor": 0.3
             }
         }
-    ]
+    ],
+    "environmentMap": {
+        "path": "D:/OneDrive/GitHub/Upenn/CIS_4610/homework-05-full-lighting-and-environment-maps-GrahamZen/path_tracer/environment_maps/small_apartment_1.hdr",
+        "on": true
+    }
 }

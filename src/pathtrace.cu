@@ -190,34 +190,26 @@ __global__ void computeIntersections(
     {
         PathSegment pathSegment = pathSegments[path_index];
 
-        float t;
-        glm::vec3 intersect_point;
-        glm::vec3 normal;
-        glm::vec2 uv;
+        float3 tmp_t;
+        float3 t;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
-
-        glm::vec3 tmp_intersect;
-        glm::vec3 tmp_normal;
-        glm::vec2 tmp_uv;
 
         // naive parse through global geoms
 
         for (int i = 0; i < geoms_size; i++)
         {
             TriangleDetail& tri = geoms[i];
-            t = triangleIntersectionTest(tri, pathSegment.ray, tmp_intersect, tmp_normal, tmp_uv);
+            t = triangleIntersectionTest(tri, pathSegment.ray);
             // TODO: add more intersection tests here... triangle? metaball? CSG?
 
             // Compute the minimum t from the intersection tests to determine what
             // scene geometry object was hit first.
-            if (t > 0.0f && t_min > t)
+            if (t.x > 0.0f && t_min > t.x)
             {
-                t_min = t;
+                tmp_t = t;
+                t_min = t.x;
                 hit_geom_index = i;
-                intersect_point = tmp_intersect;
-                normal = tmp_normal;
-                uv = tmp_uv;
             }
         }
 
@@ -229,12 +221,16 @@ __global__ void computeIntersections(
         else
         {
             //The ray hits something
+            t = tmp_t;
+            float w = 1 - t.y - t.z;
+            TriangleDetail& tri = geoms[hit_geom_index];
             intersections[path_index].t = t_min;
-            intersections[path_index].materialId = geoms[hit_geom_index].materialid;
-            intersections[path_index].uv = uv;
-            intersections[path_index].surfaceNormal = normal;
-            intersections[path_index].pos = intersect_point;
+            intersections[path_index].materialId = tri.materialid;
+            intersections[path_index].uv = t.y * tri.uv0 + t.z * tri.uv1 + w * tri.uv2;
+            intersections[path_index].pos = getPointOnRay(pathSegment.ray, t_min);
             intersections[path_index].woW = -pathSegment.ray.direction;
+            intersections[path_index].surfaceNormal =
+                glm::normalize(glm::vec3(tri.t.invTranspose * glm::vec4(t.y * tri.normal0 + t.z * tri.normal1 + w * tri.normal2, 0.f)));
             if (sortByMaterial)
                 materialIndices[path_index] = intersections[path_index].materialId;
         }
