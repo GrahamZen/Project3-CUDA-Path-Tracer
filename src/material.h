@@ -12,6 +12,13 @@ __device__ __inline__ glm::vec3 sampleTexture(cudaTextureObject_t tex, glm::vec2
     return glm::vec3(color.x, color.y, color.z);
 }
 
+__device__ __inline__ glm::vec2 sampleSphericalMap(glm::vec3 v) {
+    glm::vec2 uv = glm::vec2(glm::atan(v.z, v.x), asin(v.y));
+    uv *= glm::vec2(0.1591, 0.3183);
+    uv += 0.5;
+    return uv;
+}
+
 struct BsdfSample
 {
     glm::vec3 wiW;

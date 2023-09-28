@@ -22,12 +22,14 @@ private:
     int loadMaterial();
     bool loadTexture();
     int loadScene();
+    void loadEnvMap();
     void loadSettings();
     void traverseNode(const tinygltf::Node& node, std::vector<glm::mat4>& transforms);
     void loadNode(const tinygltf::Node& node);
     int loadGeom(const tinygltf::Node& node, const Geom::Transformation& transform);
     bool loadCamera(const tinygltf::Node&, const glm::mat4& transform);
-    TextureInfo crateTextureObj(int textureIndex, const tinygltf::Image& image);
+    template<typename T>
+    TextureInfo createTextureObj(int textureIndex, int width, int height, int component, const T* image, size_t size);
     std::vector<cudaArray_t> dev_tex_arrs_vec;
     tinygltf::Model* model;
     const int defaultMatId = 0;
@@ -41,10 +43,11 @@ public:
         RenderState defaultRenderState;
         bool readFromFile;
         bool antiAliasing;
+        bool envMapEnabled;
     } settings;
     Scene(std::string filename);
     ~Scene();
-
+    TextureInfo envMapTexture;
     std::vector<cudaTextureObject_t> cuda_tex_vec;
     std::vector<TextureInfo> textures;
     std::vector<Geom> geoms;

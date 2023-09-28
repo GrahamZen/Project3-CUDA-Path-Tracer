@@ -243,10 +243,13 @@ __global__ void computeIntersections(
 
 __global__ void shadeMaterial(
     int iter
+    , int depth
     , int num_paths
     , ShadeableIntersection* shadeableIntersections
     , PathSegment* pathSegments
     , Material* materials
+    , cudaTextureObject_t envMap
+    , bool enableEnvMap
 )
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -292,6 +295,10 @@ __global__ void shadeMaterial(
             // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
             // used for opacity, in which case they can indicate "no opacity".
             // This can be useful for post-processing and image compositing.
+        }
+        else if (enableEnvMap && depth == 0) {
+            pSeg.color += pSeg.throughput * sampleTexture(envMap, sampleSphericalMap(pSeg.ray.direction));
+            pSeg.remainingBounces = 0;
         }
         else {
             pSeg.color = glm::vec3(0.0f);
@@ -428,7 +435,6 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
                 thrust::sort_by_key(dev_materialSegIndices_thrust, dev_materialSegIndices_thrust + num_paths, dev_paths_thrust);
             }
         }
-        depth++;
 
         // TODO:
         // --- Shading Stage ---
@@ -441,11 +447,15 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 
         shadeMaterial << <numblocksPathSegmentTracing, blockSize1d >> > (
             iter,
+            depth,
             num_paths,
             dev_intersections,
             dev_paths,
-            dev_materials
+            dev_materials,
+            hst_scene->envMapTexture.cudaTexObj,
+            hst_scene->settings.envMapEnabled
             );
+        depth++;
         // gather valid terminated paths
         dev_paths_terminated_end = thrust::remove_copy_if(dev_paths_thrust, dev_paths_thrust + num_paths, dev_paths_terminated_end,
             [] __host__  __device__(const PathSegment & p) { return !(p.pixelIndex >= 0 && p.remainingBounces == 0); });

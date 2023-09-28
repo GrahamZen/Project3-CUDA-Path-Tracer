@@ -107,7 +107,8 @@ Scene::Scene(std::string filename)
     int arraylen = camera.resolution.x * camera.resolution.y;
     state.image.resize(arraylen);
     std::fill(state.image.begin(), state.image.end(), glm::vec3());
-
+    if (settings.envMapEnabled)
+        loadEnvMap();
 }
 
 Scene::~Scene()
@@ -178,6 +179,22 @@ int Scene::loadScene()
     return 1;
 }
 
+void Scene::loadEnvMap()
+{
+    int width, height, numComponents;
+    stbi_set_flip_vertically_on_load(true);
+    float* hdrData = stbi_loadf(settings.envMapFilename.c_str(), &width, &height, &numComponents, 0);
+
+    if (!hdrData) {
+        std::cerr << "Error loading environment map: " << settings.envMapFilename << std::endl;
+        return;
+    }
+    int textureIndex = textures.size();
+
+    envMapTexture = createTextureObj(textureIndex, width, height, numComponents, hdrData, width * height * numComponents);
+    stbi_image_free(hdrData);
+}
+
 void Scene::loadSettings() {
     try {
         std::ifstream fileStream = findFile(settings.filename);
@@ -194,6 +211,8 @@ void Scene::loadSettings() {
         Material& defaultMat = settings.defaultMat;
         settings.readFromFile = jsonData["GLTF"]["from file"];
         settings.gltfPath = jsonData["GLTF"]["path"];
+        settings.envMapEnabled = jsonData["environmentMap"]["on"];
+        settings.envMapFilename = jsonData["environmentMap"]["path"];
 
         nlohmann::json renderStateData = jsonData["RenderState"];
         camera.resolution.y = renderStateData["camera"]["screen height"];
@@ -417,12 +436,13 @@ int Scene::loadMaterial() {
     }
 
     return static_cast<int>(materials.size());
-}
+    }
 
 bool Scene::loadTexture() {
     int numTextures = model->textures.size();
-    dev_tex_arrs_vec.resize(numTextures);
-    cuda_tex_vec.resize(numTextures);
+    int totalNumTextures = numTextures + (settings.envMapEnabled ? 1 : 0);
+    dev_tex_arrs_vec.resize(totalNumTextures);
+    cuda_tex_vec.resize(totalNumTextures);
 
     for (int textureIndex = 0; textureIndex < numTextures; textureIndex++) {
         const tinygltf::Texture& texture = model->textures[textureIndex];
@@ -439,49 +459,53 @@ bool Scene::loadTexture() {
             return false;
         }
 
-        textures.push_back(crateTextureObj(textureIndex, image));
+        textures.push_back(createTextureObj(textureIndex, image.width, image.height, image.component, image.image.data(), image.image.size()));
     }
     return true;
 }
 
-__host__ TextureInfo Scene::crateTextureObj(int textureIndex, const tinygltf::Image& image) {
-    int width = image.width;
-    int height = image.height;
-    int component = image.component;
+template<typename T>
+__host__ TextureInfo Scene::createTextureObj(int textureIndex, int width, int height, int component, const T* image, size_t size) {
 
     // Allocate CUDA array in device memory
-    cudaChannelFormatDesc desc = cudaCreateChannelDesc<uchar4>();
+    cudaChannelFormatDesc desc;
+    if (typeid(T) == typeid(unsigned char))
+        desc = cudaCreateChannelDesc<uchar4>();
+    else
+        desc = cudaCreateChannelDesc<float4>();
     cudaArray_t cuArray;
     cudaMallocArray(&cuArray, &desc, width, height);
+    cudaMemcpyToArray(cuArray, 0, 0, image, size * sizeof(T), cudaMemcpyHostToDevice);
 
-    // Copy image data to CUDA array
-    cudaMemcpyToArray(cuArray, 0, 0, image.image.data(), image.image.size() * sizeof(unsigned char), cudaMemcpyHostToDevice);
-
-    // Specify resource descriptor
     struct cudaResourceDesc resDesc;
     memset(&resDesc, 0, sizeof(resDesc));
     resDesc.resType = cudaResourceTypeArray;
     resDesc.res.array.array = cuArray;
 
-    // Specify texture object parameters
     struct cudaTextureDesc texDesc;
     memset(&texDesc, 0, sizeof(texDesc));
     texDesc.addressMode[0] = cudaAddressModeWrap;
     texDesc.addressMode[1] = cudaAddressModeWrap;
     texDesc.filterMode = cudaFilterModeLinear;
-    texDesc.readMode = cudaReadModeNormalizedFloat;
+    if (typeid(T) == typeid(unsigned char))
+        texDesc.readMode = cudaReadModeNormalizedFloat;
+    else
+        texDesc.readMode = cudaReadModeElementType;
     texDesc.sRGB = 1;
     texDesc.normalizedCoords = 1;
+    cudaError_t cudaError;
 
-    // Create CUDA texture object
     cudaTextureObject_t texObj = 0;
-    cudaCreateTextureObject(&texObj, &resDesc, &texDesc, NULL);
+    cudaError = cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr);
 
-    // Store CUDA array and texture object
+    if (cudaError != cudaSuccess) {
+        fprintf(stderr, "CUDA error creating texture object: %s\n", cudaGetErrorString(cudaError));
+    }
+
     dev_tex_arrs_vec[textureIndex] = cuArray;
     cuda_tex_vec[textureIndex] = texObj;
 
     cudaCreateTextureObject(&cuda_tex_vec[textureIndex], &resDesc, &texDesc, NULL);
-    checkCUDAError("crateTextureObj");
-    return TextureInfo{ textureIndex, width, height, image.component, cuda_tex_vec[textureIndex], image.image.size() };
+    checkCUDAError("createTextureObj");
+    return TextureInfo{ textureIndex, width, height, component, cuda_tex_vec[textureIndex], size };
 }
