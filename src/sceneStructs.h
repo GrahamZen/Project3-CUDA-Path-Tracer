@@ -12,13 +12,8 @@ struct TBB {
     TBB();
     TBB(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2);
     TBB(glm::vec3 min, glm::vec3 max);
-
-    glm::vec3 _min;
-    glm::vec3 _max;
-    inline float area() const {
-        glm::vec3 length = _max - _min;
-        return length.x * length.y + length.y * length.z + length.z * length.x;
-    }
+    glm::vec3 min, max;
+    float area() const;
     void expand(const glm::vec3& p);
     void expand(const TBB& other);
 };
@@ -32,11 +27,19 @@ struct TBVHNode {
     int miss, base;
 };
 
-struct TBVH {
+class TBVH
+{
+public:
     TBVH() = default;
     TBVH(std::vector<TriangleDetail>& tris, TBB& tbb);
     std::vector<std::vector<TBVHNode>> nodes;
     int nodesNum = -1;
+private:
+    int splitBVH(std::vector<TriangleDetail>& triangles, std::vector<int> objIdx, int num, TBB& tbb, int face);
+    void ReorderNodes(std::vector<TriangleDetail>& triangles, int face, int index);
+    int ReorderTree(std::vector<TriangleDetail>& triangles, int face, int index);
+    void SetLeftMissLinks(int id, int idParent, int face);
+    void SetRightMissLinks(int id, int idParent, int face);
 };
 
 enum BsdfSampleType
