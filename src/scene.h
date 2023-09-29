@@ -16,10 +16,12 @@ namespace tinygltf {
 
 class Scene {
 private:
+    static int id;
     struct Triangle {
         glm::vec3 v0, v1, v2;
         glm::vec3 normal0, normal1, normal2;
         glm::vec2 uv0, uv1, uv2;
+        int id;
     };
 
     class Primitive {
@@ -77,6 +79,8 @@ public:
     std::vector<cudaTextureObject_t> cuda_tex_vec;
     std::vector<TextureInfo> textures;
     std::vector<TriangleDetail> geoms;
+    TBB tbb;
+    TBVH tbvh;
     std::vector<Material> materials;
     std::vector<Camera> cameras;
     RenderState state;

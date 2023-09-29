@@ -8,6 +8,7 @@
 #include "scene.h"
 
 namespace fs = std::filesystem;
+int Scene::id = 0;
 
 std::ifstream findFile(const std::string& fileName) {
     fs::path currentPath = fs::current_path();
@@ -98,6 +99,7 @@ Scene::Scene(std::string filename)
         exit(-1);
     }
     loadScene();
+    tbvh = TBVH(geoms, tbb);
     if (cameras.empty()) {
         cameras.push_back(settings.defaultRenderState.camera);
     }
@@ -300,7 +302,6 @@ Scene::Mesh::Mesh(const tinygltf::Node& node, const Transformation& transform, S
     }
     t.transform = transform.transform * modelMatrix;
     recomputeTransform(t);
-    std::vector<Primitive>prims;
     for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex) {
         const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
         if (primitive.mode == TINYGLTF_MODE_TRIANGLES) {
@@ -337,8 +338,10 @@ Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transfor
             triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
             triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
         }
+        triangle.id = Scene::id++;
         tris.push_back(triangle);
-        s->geoms.emplace_back(t, materialid, triangle.v0, triangle.v1, triangle.v2, triangle.normal0, triangle.normal1, triangle.normal2, triangle.uv0, triangle.uv1, triangle.uv2);
+        s->geoms.emplace_back(t, materialid, triangle.v0, triangle.v1, triangle.v2, triangle.normal0, triangle.normal1, triangle.normal2, triangle.uv0, triangle.uv1, triangle.uv2, triangle.id);
+        s->tbb.expand(s->geoms.back().tbb);
     }
 }
 

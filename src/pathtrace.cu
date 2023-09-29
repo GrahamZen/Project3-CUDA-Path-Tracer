@@ -13,7 +13,6 @@
 #include "utilities.h"
 #include "pathtrace.h"
 #include "intersections.h"
-#include "interactions.h"
 #include "material.h"
 
 #define ERRORCHECK 1

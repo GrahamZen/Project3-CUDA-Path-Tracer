@@ -7,6 +7,38 @@
 #include "tiny_gltf.h"
 #define BACKGROUND_COLOR (glm::vec3(0.0f))
 
+struct TriangleDetail;
+struct TBB {
+    TBB();
+    TBB(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2);
+    TBB(glm::vec3 min, glm::vec3 max);
+
+    glm::vec3 _min;
+    glm::vec3 _max;
+    inline float area() const {
+        glm::vec3 length = _max - _min;
+        return length.x * length.y + length.y * length.z + length.z * length.x;
+    }
+    void expand(const glm::vec3& p);
+    void expand(const TBB& other);
+};
+
+
+struct TBVHNode {
+    TBB tbb;
+    bool isLeaf;
+    int left, right;
+    int triId;
+    int miss, base;
+};
+
+struct TBVH {
+    TBVH() = default;
+    TBVH(std::vector<TriangleDetail>& tris, TBB& tbb);
+    std::vector<std::vector<TBVHNode>> nodes;
+    int nodesNum = -1;
+};
+
 enum BsdfSampleType
 {
     DIFFUSE_REFL = 1,
@@ -36,15 +68,18 @@ struct Transformation {
 struct TriangleDetail {
     TriangleDetail(Transformation t, int materialid, glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
         glm::vec3 normal0, glm::vec3 normal1, glm::vec3 normal2,
-        glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2)
+        glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, int id)
         : t(t), materialid(materialid), v0(v0), v1(v1), v2(v2),
         normal0(normal0), normal1(normal1), normal2(normal2),
-        uv0(uv0), uv1(uv1), uv2(uv2) {}
+        uv0(uv0), uv1(uv1), uv2(uv2), centroid((v0 + v1 + v2)* (1.f / 3.f)), tbb(v0, v1, v2), id(id) {}
     Transformation t;
     int materialid;
     glm::vec3 v0, v1, v2;
     glm::vec3 normal0, normal1, normal2;
+    glm::vec3 centroid;
     glm::vec2 uv0, uv1, uv2;
+    TBB tbb;
+    int id = -1;
 };
 
 struct TextureInfo {
