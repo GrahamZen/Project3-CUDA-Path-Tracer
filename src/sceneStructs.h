@@ -23,7 +23,7 @@ struct TBVHNode {
     TBB tbb;
     bool isLeaf;
     int left, right;
-    int triId;
+    int triId = -1;
     int miss, base;
 };
 

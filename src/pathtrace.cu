@@ -58,6 +58,7 @@ static PathSegment* dev_paths_terminated = nullptr;
 static int* dev_materialIsectIndices = nullptr;
 static int* dev_materialIsectIndicesCache = nullptr;
 static int* dev_materialSegIndices = nullptr;
+static TBVHNode* dev_tbvhNodes = nullptr;
 static thrust::device_ptr<PathSegment> dev_paths_thrust;
 static thrust::device_ptr<PathSegment> dev_paths_terminated_thrust;
 static thrust::device_ptr<int> dev_materialIsectIndices_thrust;
@@ -107,6 +108,12 @@ void pathtraceInit(Scene* scene) {
 
     dev_paths_thrust = thrust::device_ptr<PathSegment>(dev_paths);
     dev_paths_terminated_thrust = thrust::device_ptr<PathSegment>(dev_paths_terminated);
+
+    cudaMalloc(&dev_tbvhNodes, 6 * hst_scene->tbvh.nodesNum * sizeof(TBVHNode));
+    for (int i = 0; i < 6; i++)
+    {
+        cudaMemcpy(dev_tbvhNodes + i * hst_scene->tbvh.nodesNum, hst_scene->tbvh.nodes[i].data(), hst_scene->tbvh.nodesNum * sizeof(TBVHNode), cudaMemcpyHostToDevice);
+    }
 
     // TODO: initialize any extra device memeory you need
 
@@ -177,7 +184,9 @@ __global__ void computeIntersections(
     , int num_paths
     , PathSegment* pathSegments
     , TriangleDetail* geoms
+    , TBVHNode* nodes
     , int geoms_size
+    , int nodesNum
     , ShadeableIntersection* intersections
     , bool sortByMaterial,
     int* materialIndices
@@ -189,28 +198,13 @@ __global__ void computeIntersections(
     {
         PathSegment pathSegment = pathSegments[path_index];
 
-        float3 tmp_t;
         float3 t;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
 
         // naive parse through global geoms
 
-        for (int i = 0; i < geoms_size; i++)
-        {
-            TriangleDetail& tri = geoms[i];
-            t = triangleIntersectionTest(tri, pathSegment.ray);
-            // TODO: add more intersection tests here... triangle? metaball? CSG?
-
-            // Compute the minimum t from the intersection tests to determine what
-            // scene geometry object was hit first.
-            if (t.x > 0.0f && t_min > t.x)
-            {
-                tmp_t = t;
-                t_min = t.x;
-                hit_geom_index = i;
-            }
-        }
+        t = sceneIntersectionTest(geoms, nodes, nodesNum, pathSegment.ray, hit_geom_index);
 
         if (hit_geom_index == -1)
         {
@@ -220,7 +214,6 @@ __global__ void computeIntersections(
         else
         {
             //The ray hits something
-            t = tmp_t;
             float w = 1 - t.y - t.z;
             TriangleDetail& tri = geoms[hit_geom_index];
             intersections[path_index].t = t_min;
@@ -380,12 +373,15 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 
         // tracing
         dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
+        checkCudaMem(dev_tbvhNodes, 6 * hst_scene->tbvh.nodesNum);
         computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
             depth
             , num_paths
             , dev_paths
             , dev_geoms
+            , dev_tbvhNodes
             , hst_scene->geoms.size()
+            , hst_scene->tbvh.nodesNum
             , dev_intersections_cache
             , guiData->SortByMaterial,
             dev_materialIsectIndices
@@ -417,7 +413,9 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
                 , num_paths
                 , dev_paths
                 , dev_geoms
+                , dev_tbvhNodes
                 , hst_scene->geoms.size()
+                , hst_scene->tbvh.nodesNum
                 , dev_intersections
                 , guiData->SortByMaterial,
                 dev_materialIsectIndices

@@ -68,11 +68,12 @@ void printBVH(std::ofstream& fout, std::vector<TriangleDetail>& triangles, int i
         {
             fout << "  ";
         }
-        fout << "  " << nodes[0][index].triId << std::endl;
+        fout << "triIdx:  " << nodes[0][index].triId << ", miss: " << nodes[0][index].miss << ", base: " << nodes[0][index].base << std::endl;
     }
     else
     {
-        fout << "internal" << std::endl;
+        fout << "internal: ";
+        fout << "triIdx:  " << nodes[0][index].triId << ", miss: " << nodes[0][index].miss << ", base: " << nodes[0][index].base << std::endl;
         printBVH(fout, triangles, nodes[0][index].left, Level + 1, nodes);
         printBVH(fout, triangles, nodes[0][index].right, Level + 1, nodes);
     }

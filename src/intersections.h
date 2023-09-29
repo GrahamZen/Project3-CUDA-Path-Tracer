@@ -35,6 +35,13 @@ __host__ __device__ glm::vec3 multiplyMV(const glm::mat4& m, const glm::vec4& v)
     return glm::vec3(m * v);
 }
 
+
+/*
+* return val:
+* x: t
+* y: v0's weight
+* z: v1's weight
+*/
 __host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray r)
 {
     glm::vec3 v0 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v0, 1.f));
@@ -60,6 +67,67 @@ __host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray
         return { -1,0,0 };
     return { t, 1 - u - v, u };
 }
+
+__device__ bool intersectTBB(const Ray& ray, const TBB& tbb, float& tmin) {
+    float tmax, tymin, tymax, tzmin, tzmax;
+    tmin = (tbb.min.x - ray.origin.x) / ray.direction.x;
+    tmax = (tbb.max.x - ray.origin.x) / ray.direction.x;
+    tymin = (tbb.min.y - ray.origin.y) / ray.direction.y;
+    tymax = (tbb.max.y - ray.origin.y) / ray.direction.y;
+    if ((tmin > tymax) || (tymin > tmax))
+        return false;
+    if (tymin > tmin)
+        tmin = tymin;
+    if (tymax < tmax)
+        tmax = tymax;
+    tzmin = (tbb.min.z - ray.origin.z) / ray.direction.z;
+    tzmax = (tbb.max.z - ray.origin.z) / ray.direction.z;
+    if ((tmin > tzmax) || (tzmin > tmax))
+        return false;
+    if (tzmin > tmin)
+        tmin = tzmin;
+    if (tzmax < tmax)
+        tmax = tzmax;
+    return true;
+}
+
+__device__ int mapDirToIdx(const glm::vec3& r) {
+    return 0;
+}
+
+
+__device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nodes, int nodesNum, Ray r, int& hitIdx) {
+    int tbbOffset = mapDirToIdx(r.direction);
+    int currentNodeIdx = 0;
+    float t_min = FLT_MAX;
+    float3 tmp_t;
+    float3 t;
+    hitIdx = -1;
+    int tmpHitIdx = -1;
+    while (currentNodeIdx != -1 && currentNodeIdx < nodesNum)
+    {
+        float tbbTmin = FLT_MAX;
+        const TBVHNode& currNode = nodes[tbbOffset * nodesNum + currentNodeIdx];
+        if (intersectTBB(r, currNode.tbb, tbbTmin) && tbbTmin < t_min) {
+            if (currNode.isLeaf)
+            {
+                t = triangleIntersectionTest(triangles[currNode.triId], r);
+                if (t.x > 0.0f && t_min > t.x) {
+                    tmp_t = t;
+                    t_min = t.x;
+                    hitIdx = currNode.triId;
+                }
+            }
+            currentNodeIdx++;
+        }
+        else
+        {
+            currentNodeIdx = currNode.miss;
+        }
+    }
+    return tmp_t;
+}
+
 
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth) {
