@@ -1,7 +1,6 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtx/intersect.hpp>
 
 #include "sceneStructs.h"
 #include "utilities.h"
@@ -79,25 +78,22 @@ __device__ bool intersectTBB(const Ray& ray, const TBB& aabb, float& tmin) {
     float t6 = (aabb.max.z - ray.origin.z) * invDir.z;
     float tmin_temp = glm::max(glm::max(glm::min(t1, t2), glm::min(t3, t4)), glm::min(t5, t6));
     float tmax_temp = glm::min(glm::min(glm::max(t1, t2), glm::max(t3, t4)), glm::max(t5, t6));
-    if (tmax_temp < 0 || tmin_temp > tmax_temp) {
+    if (tmax_temp < 0 || tmin_temp > tmax_temp)
         return false;
-    }
-    if (tmin_temp > 0) {
+    if (tmin_temp > 0)
         tmin = tmin_temp;
-    }
-    else {
+    else
         tmin = tmax_temp;
-    }
 
     return true;
 }
 
-__device__ int mapDirToIdx(const glm::vec3& r) {
-    return 0;
+__device__ __inline__ int mapDirToIdx(cudaTextureObject_t cubemap, const glm::vec3& direction) {
+    return texCubemap<int>(cubemap, direction.x, direction.y, direction.z);
 }
 
-__device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nodes, int nodesNum, Ray r, int& hit_geom_index) {
-    int tbbOffset = mapDirToIdx(r.direction);
+__device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nodes, int nodesNum, Ray r, int& hit_geom_index, cudaTextureObject_t cubemap) {
+    int tbbOffset = mapDirToIdx(cubemap, r.direction);
     int currentNodeIdx = 0;
     float t_min = FLT_MAX;
     float3 tmp_t;

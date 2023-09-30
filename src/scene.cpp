@@ -98,6 +98,7 @@ Scene::Scene(std::string filename)
 
         exit(-1);
     }
+    createCubemapTextureObj();
     loadScene();
     tbvh = TBVH(geoms, tbb);
     if (cameras.empty()) {
@@ -534,4 +535,41 @@ __host__ TextureInfo Scene::createTextureObj(int textureIndex, int width, int he
     cudaCreateTextureObject(&cuda_tex_vec[textureIndex], &resDesc, &texDesc, NULL);
     checkCUDAError("createTextureObj");
     return TextureInfo{ textureIndex, width, height, component, cuda_tex_vec[textureIndex], size };
+}
+
+void Scene::createCubemapTextureObj() {
+    int cubemapData[6] = { 0, 1, 2, 3, 4, 5 };
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<int>();
+    cudaError_t cudaError;
+
+    cudaError = cudaMalloc3DArray(&cubemap.cubemapArray, &channelDesc, make_cudaExtent(1, 1, 6), cudaArrayCubemap);
+    if (cudaError != cudaSuccess) {
+        fprintf(stderr, "CUDA error cudaMalloc3DArray: %s\n", cudaGetErrorString(cudaError));
+    }
+    cudaMemcpy3DParms copyParams = { 0 };
+    copyParams.srcPtr = make_cudaPitchedPtr((void*)cubemapData, sizeof(int), 1, 1);
+    copyParams.dstArray = cubemap.cubemapArray;
+    copyParams.extent = make_cudaExtent(1, 1, 6);
+    copyParams.kind = cudaMemcpyHostToDevice;
+
+    cudaError = cudaMemcpy3D(&copyParams);
+    if (cudaError != cudaSuccess) {
+        fprintf(stderr, "CUDA error cudaMemcpy3D: %s\n", cudaGetErrorString(cudaError));
+    }
+    struct cudaResourceDesc resDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeArray;
+    resDesc.res.array.array = cubemap.cubemapArray;
+
+    struct cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeWrap;
+    texDesc.addressMode[1] = cudaAddressModeWrap;
+    texDesc.filterMode = cudaFilterModePoint;
+
+    cudaError = cudaCreateTextureObject(&cubemap.texObj, &resDesc, &texDesc, nullptr);
+    if (cudaError != cudaSuccess) {
+        fprintf(stderr, "CUDA error creating texture object: %s\n", cudaGetErrorString(cudaError));
+        exit(-1);
+    }
 }

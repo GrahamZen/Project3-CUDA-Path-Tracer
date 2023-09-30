@@ -75,8 +75,8 @@ __device__ float fresnelDielectricEval(float cosThetaI, float eta)
     bool entering = cosThetaI > 0.f;
     if (!entering)
     {
-        float etaT = 1.;
-        float etaI = eta;
+        etaT = 1.;
+        etaI = eta;
         cosThetaI = abs(cosThetaI);
     }
 

@@ -57,6 +57,7 @@ private:
     bool loadCamera(const tinygltf::Node&, const glm::mat4& transform);
     template<typename T>
     TextureInfo createTextureObj(int textureIndex, int width, int height, int component, const T* image, size_t size);
+    void createCubemapTextureObj();
     std::vector<cudaArray_t> dev_tex_arrs_vec;
     std::vector<Mesh> meshes;
     tinygltf::Model* model;
@@ -73,6 +74,10 @@ public:
         bool antiAliasing;
         bool envMapEnabled;
     } settings;
+    struct Cubemap {
+        cudaTextureObject_t texObj;
+        cudaArray_t cubemapArray;
+    }cubemap;
     Scene(std::string filename);
     ~Scene();
     TextureInfo envMapTexture;

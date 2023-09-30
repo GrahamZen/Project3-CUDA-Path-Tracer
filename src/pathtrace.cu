@@ -191,6 +191,7 @@ __global__ void computeIntersections(
     , bool sortByMaterial
     , int* materialIndices
     , bool useBVH
+    , cudaTextureObject_t cubemap
 )
 {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -206,7 +207,7 @@ __global__ void computeIntersections(
 
         // naive parse through global geoms
         if (useBVH)
-            tmp_t = sceneIntersectionTest(geoms, nodes, nodesNum, pathSegment.ray, hit_geom_index);
+            tmp_t = sceneIntersectionTest(geoms, nodes, nodesNum, pathSegment.ray, hit_geom_index, cubemap);
         else {
             for (int i = 0; i < geoms_size; i++)
             {
@@ -408,6 +409,7 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
             , guiData->SortByMaterial
             , dev_materialIsectIndices
             , guiData->UseBVH
+            , hst_scene->cubemap.texObj
             );
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();
@@ -443,6 +445,7 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
                 , guiData->SortByMaterial
                 , dev_materialIsectIndices
                 , guiData->UseBVH
+                , hst_scene->cubemap.texObj
                 );
             checkCUDAError("trace one bounce");
             cudaDeviceSynchronize();
