@@ -335,9 +335,9 @@ Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transfor
             triangle.normal2 = glm::vec3(normals[v2Id * 3], normals[v2Id * 3 + 1], normals[v2Id * 3 + 2]);
         }
         if (uvs) {
-            triangle.uv0 = glm::vec2(normals[v0Id * 2], normals[v0Id * 2 + 1]);
-            triangle.uv1 = glm::vec2(normals[v1Id * 2], normals[v1Id * 2 + 1]);
-            triangle.uv2 = glm::vec2(normals[v2Id * 2], normals[v2Id * 2 + 1]);
+            triangle.uv0 = glm::vec2(uvs[v0Id * 2], uvs[v0Id * 2 + 1]);
+            triangle.uv1 = glm::vec2(uvs[v1Id * 2], uvs[v1Id * 2 + 1]);
+            triangle.uv2 = glm::vec2(uvs[v2Id * 2], uvs[v2Id * 2 + 1]);
         }
         triangle.id = Scene::id++;
         tris.push_back(triangle);

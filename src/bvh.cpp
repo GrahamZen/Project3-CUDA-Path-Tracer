@@ -22,22 +22,17 @@ void sortAxis(std::vector<TriangleDetail>& triangles, std::vector<int>& obj_inde
     int j = ri;
 
     const float pivot = triangles[obj_index[(li + ri) / 2]].centroid[axis];
-    for (;;)
+    while (true)
     {
         while (triangles[obj_index[i]].centroid[axis] < pivot) i++;
         while (triangles[obj_index[j]].centroid[axis] > pivot) j--;
         if (i >= j) break;
-
-        const int temp = obj_index[i];
-        obj_index[i] = obj_index[j];
-        obj_index[j] = temp;
-
-        i++;
-        j--;
+        std::swap(obj_index[i], obj_index[j]);
+        i++; j--;
     }
 
-    if (li < (i - 1)) sortAxis(triangles, obj_index, axis, li, i - 1);
-    if ((j + 1) < ri) sortAxis(triangles, obj_index, axis, j + 1, ri);
+    if (li < i - 1) sortAxis(triangles, obj_index, axis, li, i - 1);
+    if (j + 1 < ri) sortAxis(triangles, obj_index, axis, j + 1, ri);
 }
 
 void printBVH(std::ofstream& fout, std::vector<TriangleDetail>& triangles, int index, int Level, std::vector<std::vector<TBVHNode>>& nodes)
@@ -67,12 +62,6 @@ void printBVH(std::ofstream& fout, std::vector<TriangleDetail>& triangles, int i
         printBVH(fout, triangles, nodes[0][index].right, Level + 1, nodes);
     }
 }
-
-void sortAxis(std::vector<TriangleDetail>& triangles, std::vector<int>& objIdx, int axis)
-{
-    std::stable_sort(objIdx.begin(), objIdx.end(), [axis, triangles](const int& a, const int& b) {return (triangles[a].centroid[axis] < triangles[b].centroid[axis]); });
-}
-
 
 int TBVH::splitBVH(std::vector<TriangleDetail>& triangles, std::vector<int> objIdx, int num, TBB& tbb, int face)
 {
