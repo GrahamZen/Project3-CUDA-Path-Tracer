@@ -33,6 +33,7 @@ public:
     GuiDataContainer() : TracedDepth(0) {}
     int TracedDepth;
     bool SortByMaterial;
+    bool UseBVH;
 };
 
 namespace utilityCore

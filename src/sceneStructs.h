@@ -14,8 +14,15 @@ struct TBB {
     TBB(glm::vec3 min, glm::vec3 max);
     glm::vec3 min, max;
     float area() const;
-    void expand(const glm::vec3& p);
-    void expand(const TBB& other);
+    inline void expand(const glm::vec3& p) {
+        this->max = glm::max(this->max, p);
+        this->min = glm::min(this->min, p);
+    }
+    inline void expand(const TBB& other)
+    {
+        expand(other.max);
+        expand(other.min);
+    }
 };
 
 
@@ -36,10 +43,10 @@ public:
     int nodesNum = -1;
 private:
     int splitBVH(std::vector<TriangleDetail>& triangles, std::vector<int> objIdx, int num, TBB& tbb, int face);
-    void ReorderNodes(std::vector<TriangleDetail>& triangles, int face, int index);
-    int ReorderTree(std::vector<TriangleDetail>& triangles, int face, int index);
-    void SetLeftMissLinks(int id, int idParent, int face);
-    void SetRightMissLinks(int id, int idParent, int face);
+    void reorderNodes(std::vector<TriangleDetail>& triangles, int face, int index);
+    int reorderTree(std::vector<TriangleDetail>& triangles, int face, int index);
+    void setLeftMiss(int id, int idParent, int face);
+    void setRightMiss(int id, int idParent, int face);
 };
 
 enum BsdfSampleType
@@ -74,7 +81,8 @@ struct TriangleDetail {
         glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, int id)
         : t(t), materialid(materialid), v0(v0), v1(v1), v2(v2),
         normal0(normal0), normal1(normal1), normal2(normal2),
-        uv0(uv0), uv1(uv1), uv2(uv2), centroid((v0 + v1 + v2)* (1.f / 3.f)), tbb(v0, v1, v2), id(id) {}
+        uv0(uv0), uv1(uv1), uv2(uv2), centroid((v0 + v1 + v2)* (1.f / 3.f)),
+        tbb(glm::vec3(t.transform* glm::vec4(v0, 1.f)), glm::vec3(t.transform* glm::vec4(v1, 1.f)), glm::vec3(t.transform* glm::vec4(v2, 1.f))), id(id) {}
     Transformation t;
     int materialid;
     glm::vec3 v0, v1, v2;

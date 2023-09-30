@@ -68,26 +68,27 @@ __host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray
     return { t, 1 - u - v, u };
 }
 
-__device__ bool intersectTBB(const Ray& ray, const TBB& tbb, float& tmin) {
-    float tmax, tymin, tymax, tzmin, tzmax;
-    tmin = (tbb.min.x - ray.origin.x) / ray.direction.x;
-    tmax = (tbb.max.x - ray.origin.x) / ray.direction.x;
-    tymin = (tbb.min.y - ray.origin.y) / ray.direction.y;
-    tymax = (tbb.max.y - ray.origin.y) / ray.direction.y;
-    if ((tmin > tymax) || (tymin > tmax))
+__device__ bool intersectTBB(const Ray& ray, const TBB& aabb, float& tmin) {
+    glm::vec3 invDir = 1.0f / ray.direction;
+
+    float t1 = (aabb.min.x - ray.origin.x) * invDir.x;
+    float t2 = (aabb.max.x - ray.origin.x) * invDir.x;
+    float t3 = (aabb.min.y - ray.origin.y) * invDir.y;
+    float t4 = (aabb.max.y - ray.origin.y) * invDir.y;
+    float t5 = (aabb.min.z - ray.origin.z) * invDir.z;
+    float t6 = (aabb.max.z - ray.origin.z) * invDir.z;
+    float tmin_temp = glm::max(glm::max(glm::min(t1, t2), glm::min(t3, t4)), glm::min(t5, t6));
+    float tmax_temp = glm::min(glm::min(glm::max(t1, t2), glm::max(t3, t4)), glm::max(t5, t6));
+    if (tmax_temp < 0 || tmin_temp > tmax_temp) {
         return false;
-    if (tymin > tmin)
-        tmin = tymin;
-    if (tymax < tmax)
-        tmax = tymax;
-    tzmin = (tbb.min.z - ray.origin.z) / ray.direction.z;
-    tzmax = (tbb.max.z - ray.origin.z) / ray.direction.z;
-    if ((tmin > tzmax) || (tzmin > tmax))
-        return false;
-    if (tzmin > tmin)
-        tmin = tzmin;
-    if (tzmax < tmax)
-        tmax = tzmax;
+    }
+    if (tmin_temp > 0) {
+        tmin = tmin_temp;
+    }
+    else {
+        tmin = tmax_temp;
+    }
+
     return true;
 }
 
@@ -95,27 +96,26 @@ __device__ int mapDirToIdx(const glm::vec3& r) {
     return 0;
 }
 
-
-__device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nodes, int nodesNum, Ray r, int& hitIdx) {
+__device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nodes, int nodesNum, Ray r, int& hit_geom_index) {
     int tbbOffset = mapDirToIdx(r.direction);
     int currentNodeIdx = 0;
     float t_min = FLT_MAX;
     float3 tmp_t;
     float3 t;
-    hitIdx = -1;
-    int tmpHitIdx = -1;
+    hit_geom_index = -1;
+
     while (currentNodeIdx != -1 && currentNodeIdx < nodesNum)
     {
         float tbbTmin = FLT_MAX;
         const TBVHNode& currNode = nodes[tbbOffset * nodesNum + currentNodeIdx];
-        if (intersectTBB(r, currNode.tbb, tbbTmin) && tbbTmin < t_min) {
+        if (intersectTBB(r, currNode.tbb, tbbTmin) && tbbTmin <= t_min) {
             if (currNode.isLeaf)
             {
                 t = triangleIntersectionTest(triangles[currNode.triId], r);
                 if (t.x > 0.0f && t_min > t.x) {
                     tmp_t = t;
                     t_min = t.x;
-                    hitIdx = currNode.triId;
+                    hit_geom_index = currNode.triId;
                 }
             }
             currentNodeIdx++;
@@ -127,7 +127,6 @@ __device__ float3 sceneIntersectionTest(TriangleDetail* triangles, TBVHNode* nod
     }
     return tmp_t;
 }
-
 
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth) {

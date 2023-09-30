@@ -16,17 +16,6 @@ inline float TBB::area() const {
     return length.x * length.y + length.y * length.z + length.z * length.x;
 }
 
-inline void TBB::expand(const glm::vec3& p) {
-    this->max = glm::max(this->max, p);
-    this->min = glm::min(this->min, p);
-}
-
-inline void TBB::expand(const TBB& other)
-{
-    expand(other.max);
-    expand(other.min);
-}
-
 void sortAxis(std::vector<TriangleDetail>& triangles, std::vector<int>& obj_index, char axis, int li, int ri)
 {
     int i = li;
@@ -170,69 +159,60 @@ int TBVH::splitBVH(std::vector<TriangleDetail>& triangles, std::vector<int> objI
 
 
 
-void TBVH::ReorderNodes(std::vector<TriangleDetail>& triangles, int face, int index)
+void TBVH::reorderNodes(std::vector<TriangleDetail>& triangles, int face, int index)
 {
     if (index < 0) return;
-    if ((unsigned int)tnodeNum == (triangles.size() * 2)) return;
+    if (tnodeNum == triangles.size() * 2) return;
 
     int id = tnodeNum;
     tnodeNum++;
     nodes[face][id] = nodes[6][index];
     nodes[face][id].base = index;
-
     if (nodes[6][index].isLeaf) return;
-
-    ReorderNodes(triangles, face, nodes[6][index].left);
-    ReorderNodes(triangles, face, nodes[6][index].right);
+    reorderNodes(triangles, face, nodes[6][index].left);
+    reorderNodes(triangles, face, nodes[6][index].right);
 }
 
 
-int TBVH::ReorderTree(std::vector<TriangleDetail>& triangles, int face, int index)
+int TBVH::reorderTree(std::vector<TriangleDetail>& triangles, int face, int index)
 {
     if (nodes[6][index].isLeaf)
     {
         tnodeNum++;
         return tnodeNum - 1;
     }
-
+    int id = tnodeNum;
     tnodeNum++;
-    int id = tnodeNum - 1;
-    nodes[face][id].left = ReorderTree(triangles, face, nodes[6][index].left);
-    nodes[face][id].right = ReorderTree(triangles, face, nodes[6][index].right);
+    nodes[face][id].left = reorderTree(triangles, face, nodes[6][index].left);
+    nodes[face][id].right = reorderTree(triangles, face, nodes[6][index].right);
     return id;
 }
 
 
-void TBVH::SetLeftMissLinks(int id, int idParent, int face)
+void TBVH::setLeftMiss(int id, int idParent, int face)
 {
     if (nodes[face][id].isLeaf)
     {
         nodes[face][id].miss = id + 1;
         return;
     }
-
     nodes[face][id].miss = nodes[face][idParent].right;
-
-    SetLeftMissLinks(nodes[face][id].left, id, face);
-    SetLeftMissLinks(nodes[face][id].right, id, face);
+    setLeftMiss(nodes[face][id].left, id, face);
+    setLeftMiss(nodes[face][id].right, id, face);
 }
 
 
-void TBVH::SetRightMissLinks(int id, int idParent, int face)
+void TBVH::setRightMiss(int id, int idParent, int face)
 {
     if (nodes[face][id].isLeaf)
     {
         nodes[face][id].miss = id + 1;
         return;
     }
-
     if (nodes[face][idParent].right == id)
-    {
         nodes[face][id].miss = nodes[face][idParent].miss;
-    }
-
-    SetRightMissLinks(nodes[face][id].left, id, face);
-    SetRightMissLinks(nodes[face][id].right, id, face);
+    setRightMiss(nodes[face][id].left, id, face);
+    setRightMiss(nodes[face][id].right, id, face);
 }
 
 
@@ -270,15 +250,15 @@ TBVH::TBVH(std::vector<TriangleDetail>& triangles, TBB& tbb)
             }
 
             tnodeNum = 0;
-            ReorderNodes(triangles, face, 0);
+            reorderNodes(triangles, face, 0);
             tnodeNum = 0;
-            ReorderTree(triangles, face, 0);
+            reorderTree(triangles, face, 0);
         }
 
         nodes[face][0].miss = -1;
-        SetLeftMissLinks(0, 0, face);
+        setLeftMiss(0, 0, face);
         nodes[face][0].miss = -1;
-        SetRightMissLinks(0, 0, face);
+        setRightMiss(0, 0, face);
         nodes[face][0].miss = -1;
     }
     std::ofstream fout("../bvh.txt", std::ios::out | std::ios::trunc);

@@ -188,8 +188,9 @@ __global__ void computeIntersections(
     , int geoms_size
     , int nodesNum
     , ShadeableIntersection* intersections
-    , bool sortByMaterial,
-    int* materialIndices
+    , bool sortByMaterial
+    , int* materialIndices
+    , bool useBVH
 )
 {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -198,13 +199,32 @@ __global__ void computeIntersections(
     {
         PathSegment pathSegment = pathSegments[path_index];
 
+        float3 tmp_t;
         float3 t;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
 
         // naive parse through global geoms
+        if (useBVH)
+            tmp_t = sceneIntersectionTest(geoms, nodes, nodesNum, pathSegment.ray, hit_geom_index);
+        else {
+            for (int i = 0; i < geoms_size; i++)
+            {
+                TriangleDetail& tri = geoms[i];
+                t = triangleIntersectionTest(tri, pathSegment.ray);
+                // TODO: add more intersection tests here... triangle? metaball? CSG?
 
-        t = sceneIntersectionTest(geoms, nodes, nodesNum, pathSegment.ray, hit_geom_index);
+                // Compute the minimum t from the intersection tests to determine what
+                // scene geometry object was hit first.
+                if (t.x > 0.0f && t_min > t.x)
+                {
+                    tmp_t = t;
+                    t_min = t.x;
+                    hit_geom_index = i;
+                }
+            }
+        }
+
 
         if (hit_geom_index == -1)
         {
@@ -214,6 +234,8 @@ __global__ void computeIntersections(
         else
         {
             //The ray hits something
+            t = tmp_t;
+            t_min = t.x;
             float w = 1 - t.y - t.z;
             TriangleDetail& tri = geoms[hit_geom_index];
             intersections[path_index].t = t_min;
@@ -383,8 +405,9 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
             , hst_scene->geoms.size()
             , hst_scene->tbvh.nodesNum
             , dev_intersections_cache
-            , guiData->SortByMaterial,
-            dev_materialIsectIndices
+            , guiData->SortByMaterial
+            , dev_materialIsectIndices
+            , guiData->UseBVH
             );
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();
@@ -417,8 +440,9 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
                 , hst_scene->geoms.size()
                 , hst_scene->tbvh.nodesNum
                 , dev_intersections
-                , guiData->SortByMaterial,
-                dev_materialIsectIndices
+                , guiData->SortByMaterial
+                , dev_materialIsectIndices
+                , guiData->UseBVH
                 );
             checkCUDAError("trace one bounce");
             cudaDeviceSynchronize();
