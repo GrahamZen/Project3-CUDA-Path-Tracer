@@ -306,27 +306,43 @@ __global__ void shadeMaterial(
                 pSeg.remainingBounces = 0;
             }
             else {
-                float ao{ 1.f };
-                if (material.occlusionTexture.index != -1) {
-                    auto aoData = tex2D<float4>(material.occlusionTexture.cudaTexObj, intersection.uv.x, intersection.uv.y);
-                    ao = aoData.x;
-                }
-                glm::vec3 nor = intersection.surfaceNormal;
-                if (material.normalTexture.index != -1) {
-                    nor = sampleTexture(material.normalTexture.cudaTexObj, intersection.uv);
-                    nor = glm::normalize(nor) * 2.f - 1.f;
-                    nor = glm::normalize((glm::mat3(glm::vec3(intersection.tangent), glm::cross(intersection.surfaceNormal, glm::vec3(intersection.tangent)) * intersection.tangent[3], intersection.surfaceNormal)) * nor);
-                }
-                BsdfSample sample;
-                auto bsdf = ao * sample_f(material, settings.isProcedural, settings.scale, nor, intersection.uv, intersection.woW, glm::vec3(u01(rng), u01(rng), u01(rng)), sample);
-                if (sample.pdf <= 0) {
+                if (settings.testNormal) {
+                    glm::vec3 nor = intersection.surfaceNormal;
+                    if (material.normalTexture.index != -1) {
+                        nor = sampleTexture(material.normalTexture.cudaTexObj, intersection.uv);
+                        nor = glm::normalize(nor) * 2.f - 1.f;
+                        nor = glm::normalize((glm::mat3(glm::vec3(intersection.tangent), glm::cross(intersection.surfaceNormal, glm::vec3(intersection.tangent)) * intersection.tangent[3], intersection.surfaceNormal)) * nor);
+                    }
+                    pSeg.color = nor * 0.5f + 0.5f;
                     pSeg.remainingBounces = 0;
-                    pSeg.pixelIndex = -1;
+                }
+                else if (settings.testIntersect) {
+                    pSeg.color = settings.testColor;
+                    pSeg.remainingBounces = 0;
                 }
                 else {
-                    pSeg.remainingBounces -= 1;
-                    pSeg.throughput *= bsdf / sample.pdf * AbsDot(intersection.surfaceNormal, sample.wiW);
-                    pSeg.ray = SpawnRay(intersection.pos, sample.wiW);
+                    float ao{ 1.f };
+                    if (material.occlusionTexture.index != -1) {
+                        auto aoData = tex2D<float4>(material.occlusionTexture.cudaTexObj, intersection.uv.x, intersection.uv.y);
+                        ao = aoData.x;
+                    }
+                    glm::vec3 nor = intersection.surfaceNormal;
+                    if (material.normalTexture.index != -1) {
+                        nor = sampleTexture(material.normalTexture.cudaTexObj, intersection.uv);
+                        nor = glm::normalize(nor) * 2.f - 1.f;
+                        nor = glm::normalize((glm::mat3(glm::vec3(intersection.tangent), glm::cross(intersection.surfaceNormal, glm::vec3(intersection.tangent)) * intersection.tangent[3], intersection.surfaceNormal)) * nor);
+                    }
+                    BsdfSample sample;
+                    auto bsdf = ao * sample_f(material, settings.isProcedural, settings.scale, nor, intersection.uv, intersection.woW, glm::vec3(u01(rng), u01(rng), u01(rng)), sample);
+                    if (sample.pdf <= 0) {
+                        pSeg.remainingBounces = 0;
+                        pSeg.pixelIndex = -1;
+                    }
+                    else {
+                        pSeg.remainingBounces -= 1;
+                        pSeg.throughput *= bsdf / sample.pdf * AbsDot(intersection.surfaceNormal, sample.wiW);
+                        pSeg.ray = SpawnRay(intersection.pos, sample.wiW);
+                    }
                 }
             }
             // If there was no intersection, color the ray black.

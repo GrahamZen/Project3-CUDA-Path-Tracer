@@ -240,6 +240,9 @@ void Scene::loadSettings() {
         settings.envMapFilename = jsonData["environmentMap"]["path"];
 
         nlohmann::json renderStateData = jsonData["RenderState"];
+        settings.trSettings.testNormal = renderStateData["test normal"];
+        settings.trSettings.testIntersect = renderStateData["test intersect"];
+        settings.trSettings.testColor = glm::vec3(renderStateData["test color"][0], renderStateData["test color"][1], renderStateData["test color"][2]);
         camera.resolution.y = renderStateData["camera"]["screen height"];
         camera.focalLength = renderStateData["camera"]["focal length"];
         camera.apertureSize = renderStateData["camera"]["aperture size"];
