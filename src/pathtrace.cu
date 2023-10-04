@@ -293,17 +293,18 @@ __global__ void shadeMaterial(
             Material material = materials[intersection.materialId];
 
             // If the material indicates that the object was a light, "light" the ray
-            //if (glm::length2(material.emissiveFactor) > 0.0f && dot(pSeg.ray.direction, intersection.surfaceNormal) < 0.f) {
+            glm::vec3 emissiveColor{ 0.f };
+            if (material.emissiveTexture.index > 0) {
+                emissiveColor = sampleTexture(material.emissiveTexture.cudaTexObj, intersection.uv);
+            }
             if (material.type == Material::Type::LIGHT) {
-                if (material.emissiveTexture.index > 0)
-                    pSeg.color = pSeg.throughput * (sampleTexture(material.emissiveTexture.cudaTexObj, intersection.uv) * material.emissiveFactor * material.emissiveStrength);
-                else
-                    pSeg.color = pSeg.throughput * (glm::vec3(material.pbrMetallicRoughness.baseColorFactor) * material.emissiveFactor * material.emissiveStrength);
+                pSeg.color = pSeg.throughput * (glm::vec3(material.pbrMetallicRoughness.baseColorFactor) * material.emissiveFactor * material.emissiveStrength);
                 pSeg.remainingBounces = 0;
             }
-            // Otherwise, do some pseudo-lighting computation. This is actually more
-            // like what you would expect from shading in a rasterizer like OpenGL.
-            // TODO: replace this! you should be able to start with basically a one-liner
+            else if (glm::length(emissiveColor) > EPSILON) {
+                pSeg.color = pSeg.throughput * emissiveColor * material.emissiveFactor * material.emissiveStrength;
+                pSeg.remainingBounces = 0;
+            }
             else {
                 float ao{ 1.f };
                 if (material.occlusionTexture.index != -1) {

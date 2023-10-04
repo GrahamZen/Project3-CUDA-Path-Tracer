@@ -358,26 +358,23 @@ __device__ glm::vec3 sample_f_pbrMetRough(glm::vec3 albedo, const float2& metall
     float metallic = metallicRoughness.x, roughness = metallicRoughness.y;
 
     glm::vec3 wh = sample_wh(wo, xi, roughness);
-    glm::vec3 F = fresnelSchlick(glm::dot(wh, wo), glm::mix(glm::vec3(.08f), glm::vec3(material.baseColorFactor), metallic));
-    glm::vec3 kS = F;
-    glm::vec3 kD = glm::vec3(1.f) - kS;
-    kD *= 1.f - metallic;
-    float pS = colorToGreyscale(kS);
-    float pD = colorToGreyscale(kD);
-    pS /= (pS + pD);
+    glm::vec3 f0 = glm::mix(glm::vec3(0.04f), albedo, metallic);
+    glm::vec3 F = fresnelSchlick(glm::dot(wh, wo), f0);
+    glm::vec3 c_diff = glm::mix(albedo, glm::vec3(0.f), metallic);
+
     float random = xi.z;
-    if (random < pS) {
+    if (random < colorToGreyscale(F)) {
         glm::vec3 R;
         if (roughness == 0.f) {
             sample.pdf = 1.f;
             R = sample_f_specular_refl(albedo, nor, wo, sample);
         }
         else
-            R = sample_f_microfacet_refl(albedo, nor, xi, wo, roughness, sample);
+            R = sample_f_microfacet_refl(albedo, nor, xi, wo, roughness * roughness, sample);
         return R;
     }
     else {
-        glm::vec3 D = sample_f_diffuse(albedo, xi, nor, sample);
+        glm::vec3 D = sample_f_diffuse(c_diff, xi, nor, sample);
         return D;
     }
 }

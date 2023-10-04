@@ -530,6 +530,7 @@ void Scene::loadExtensions(Material& material, const tinygltf::ExtensionMap& ext
             material.type = Material::Type::DIELECTRIC;
         }
         else if (extensionName == "KHR_materials_emissive_strength") {
+            material.type = Material::Type::LIGHT;
             material.emissiveStrength = extensionValue.Get("emissiveStrength").Get<double>();
         }
         else if (extensionName == "CUSTOM_materials_metal") {
@@ -558,8 +559,6 @@ int Scene::loadMaterial() {
         material.type = matType;
         const auto& emissiveFactor = gltfMaterial.emissiveFactor;
         material.emissiveFactor = glm::make_vec3(emissiveFactor.data());
-        if (glm::length2(material.emissiveFactor) > 0.f)
-            material.type = Material::Type::LIGHT;
         material.alphaCutoff = gltfMaterial.alphaCutoff;
         material.doubleSided = gltfMaterial.doubleSided;
 
