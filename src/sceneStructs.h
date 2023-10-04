@@ -179,7 +179,7 @@ struct Material {
     TextureInfo emissiveTexture;
 
     struct Dielectric {
-        float eta = 0.f;
+        float eta = 1.55f;
     }dielectric;
 
     struct Metal {
