@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <glm/glm.hpp>
 #include <glm/gtx/intersect.hpp>
@@ -35,6 +35,30 @@ __host__ __device__ glm::vec3 multiplyMV(const glm::mat4& m, const glm::vec4& v)
     return glm::vec3(m * v);
 }
 
+__host__ __device__ bool intersectRayTriangle(const glm::vec3& origin, const glm::vec3& direction,
+    const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, glm::vec3& baryCoord)
+{
+    glm::vec3 v0v1 = v1 - v0;
+    glm::vec3 v0v2 = v2 - v0;
+    glm::vec3 tvec = origin - v0;
+    glm::vec3 pvec = glm::cross(direction, v0v2);
+    float det = dot(v0v1, pvec);
+    if (fabs(det) < 1e-10)
+        return false;
+    glm::vec3 qvec = glm::cross(tvec, v0v1);
+    float invDet = 1.0 / det;
+    float t = dot(qvec, v0v2) * invDet;
+    float t_min = -1e38f;
+    float t_max = 1e38f;
+    if (t >= t_max || t <= t_min)
+        return false;
+    float u = dot(tvec, pvec) * invDet;
+    float v = dot(direction, qvec) * invDet;
+    if (v < 0 || u + v > 1 || u < 0 || u > 1)
+        return false;
+    baryCoord = { 1 - u - v, u,t };
+    return true;
+}
 
 /*
 * return val:
@@ -51,7 +75,7 @@ __host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray
     glm::vec3 bary;
     bool intersect = false;
     if (triangle.doubleSided)
-        intersect = glm::intersectRayTriangle(r.origin, r.direction, v2, v1, v0, bary);
+        intersect = intersectRayTriangle(r.origin, r.direction, v2, v1, v0, bary);
     intersect |= glm::intersectRayTriangle(r.origin, r.direction, v0, v1, v2, bary);
 
     if (!intersect) {
