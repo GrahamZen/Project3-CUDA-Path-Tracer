@@ -49,7 +49,10 @@ __host__ __device__ float3 triangleIntersectionTest(TriangleDetail triangle, Ray
     glm::vec3 v2 = multiplyMV(triangle.t.transform, glm::vec4(triangle.v2, 1.f));
 
     glm::vec3 bary;
-    bool intersect = glm::intersectRayTriangle(r.origin, r.direction, v0, v1, v2, bary);
+    bool intersect = false;
+    if (triangle.doubleSided)
+        intersect = glm::intersectRayTriangle(r.origin, r.direction, v2, v1, v0, bary);
+    intersect |= glm::intersectRayTriangle(r.origin, r.direction, v0, v1, v2, bary);
 
     if (!intersect) {
         return float3{ -1.0f, 0.f, 0.f }; // No intersection

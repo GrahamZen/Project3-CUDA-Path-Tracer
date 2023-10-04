@@ -390,7 +390,7 @@ Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transfor
             s->geoms.emplace_back(t, materialid, triangle.v0, triangle.v1, triangle.v2,
                 triangle.normal0, triangle.normal1, triangle.normal2,
                 triangle.tangent0, triangle.tangent1, triangle.tangent2,
-                triangle.uv0, triangle.uv1, triangle.uv2, triangle.id);
+                triangle.uv0, triangle.uv1, triangle.uv2, s->materials[materialid].doubleSided, triangle.id);
             s->tbb.expand(s->geoms.back().tbb);
         }
     }
@@ -436,7 +436,7 @@ Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transfor
             s->geoms.emplace_back(t, materialid, triangle.v0, triangle.v1, triangle.v2,
                 triangle.normal0, triangle.normal1, triangle.normal2,
                 triangle.tangent0, triangle.tangent1, triangle.tangent2,
-                triangle.uv0, triangle.uv1, triangle.uv2, triangle.id);
+                triangle.uv0, triangle.uv1, triangle.uv2, s->materials[materialid].doubleSided, triangle.id);
             s->tbb.expand(s->geoms.back().tbb);
         }
     }
