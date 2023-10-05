@@ -135,7 +135,8 @@ Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
     t.transform = glm::mat4(1.0f);
     t.inverseTransform = glm::mat4(1.0f);
     t.invTranspose = glm::mat4(1.0f);
-    for (auto it = transforms.rbegin(); it != transforms.rend(); ++it) {
+    for (auto it = transforms.begin(); it != transforms.end(); ++it) {
+        std::cout<<glm::to_string(*it)<<std::endl;
         t.transform = t.transform * (*it);
     }
     t.inverseTransform = glm::inverse(t.transform);

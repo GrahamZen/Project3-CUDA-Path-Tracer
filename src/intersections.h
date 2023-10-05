@@ -54,7 +54,7 @@ __host__ __device__ bool intersectRayTriangle(const glm::vec3& origin, const glm
     if (v < 0 || u + v > 1)
         return false;
     float t = dot(qvec, v0v2) * invDet;
-    baryCoord = { 1 - u - v, u, t };
+    baryCoord = { u, v, t };
     return t >= 0.f;
 }
 
