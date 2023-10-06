@@ -70,9 +70,35 @@ static ShadeableIntersection* dev_intersections_cache = nullptr;
 // TODO: static variables for device memory, any extra info you need, etc
 // ...
 
-void InitDataContainer(GuiDataContainer* imGuiData)
+void InitDataContainer(GuiDataContainer* imGuiData, Scene* scene)
 {
     guiData = imGuiData;
+    guiData->TracedDepth = scene->state.traceDepth;
+    guiData->SortByMaterial = false;
+    guiData->UseBVH = true;
+    guiData->ACESFilm = false;
+    guiData->NoGammaCorrection = false;
+    guiData->focalLength = scene->state.camera.focalLength;
+    guiData->apertureSize = scene->state.camera.apertureSize;
+    guiData->theta = 0.f;
+    guiData->phi = 0.f;
+    guiData->cameraLookAt = scene->state.camera.lookAt;
+    guiData->zoom = 1.f;
+}
+
+void UpdateDataContainer(GuiDataContainer* imGuiData, Scene* scene, float zoom, float theta, float phi)
+{
+    imGuiData->TracedDepth = scene->state.traceDepth;
+    imGuiData->SortByMaterial = false;
+    imGuiData->UseBVH = true;
+    imGuiData->ACESFilm = false;
+    imGuiData->NoGammaCorrection = false;
+    imGuiData->focalLength = scene->state.camera.focalLength;
+    imGuiData->apertureSize = scene->state.camera.apertureSize;
+    imGuiData->theta = theta;
+    imGuiData->phi = phi;
+    imGuiData->cameraLookAt = scene->state.camera.lookAt;
+    imGuiData->zoom = zoom;
 }
 
 void pathtraceInit(Scene* scene) {

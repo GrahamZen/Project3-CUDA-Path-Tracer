@@ -136,7 +136,6 @@ Transformation evaluateTransform(std::vector<glm::mat4>& transforms) {
     t.inverseTransform = glm::mat4(1.0f);
     t.invTranspose = glm::mat4(1.0f);
     for (auto it = transforms.begin(); it != transforms.end(); ++it) {
-        std::cout<<glm::to_string(*it)<<std::endl;
         t.transform = t.transform * (*it);
     }
     t.inverseTransform = glm::inverse(t.transform);
@@ -432,8 +431,10 @@ Scene::Primitive::Primitive(const tinygltf::Primitive& primitive, const Transfor
                 triangle.tangent0 = computeTangent(triangle.v0, triangle.v1, triangle.v2, triangle.uv0, triangle.uv1, triangle.uv2, triangle.normal0);
                 triangle.tangent1 = computeTangent(triangle.v1, triangle.v2, triangle.v0, triangle.uv1, triangle.uv2, triangle.uv0, triangle.normal1);
                 triangle.tangent2 = computeTangent(triangle.v2, triangle.v0, triangle.v1, triangle.uv2, triangle.uv0, triangle.uv1, triangle.normal2);
+#ifdef DEBUG
                 if (!(glm::dot(glm::vec3(triangle.tangent0), triangle.normal0) < EPSILON && (glm::dot(glm::vec3(triangle.tangent1), triangle.normal1) < EPSILON) && (glm::dot(glm::vec3(triangle.tangent2), triangle.normal2) < EPSILON)))
                     std::cerr << "tangent and normal not vertical" << std::endl;
+#endif
             }
             triangle.id = Scene::id++;
             tris.push_back(triangle);
