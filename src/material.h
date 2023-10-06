@@ -353,17 +353,35 @@ __device__ glm::vec3 sample_f_rough_dieletric(glm::vec3 albedo, glm::vec3 nor, g
     }
 }
 
-__device__ glm::vec3 sample_f_pbrMetRough(glm::vec3 albedo, const float2& metallicRoughness, const PbrMetallicRoughness& material, glm::vec3 nor, glm::vec3 xi, glm::vec3 wo, BsdfSample& sample)
+__device__ glm::vec3 sample_f_pbrMetRough(glm::vec3 albedo, const float2& metallicRoughness, const Material& material, glm::vec3 nor, glm::vec3 xi, glm::vec3 wo, BsdfSample& sample)
 {
-    float metallic = metallicRoughness.x, roughness = metallicRoughness.y;
-
-    glm::vec3 wh = sample_wh(wo, xi, roughness);
-    glm::vec3 f0 = glm::mix(glm::vec3(0.04f), albedo, metallic);
-    glm::vec3 F = fresnelSchlick(glm::dot(wh, wo), f0);
-    glm::vec3 c_diff = glm::mix(albedo, glm::vec3(0.f), metallic);
-
     float random = xi.z;
-    if (random < colorToGreyscale(F)) {
+    float metallic = metallicRoughness.x, roughness = metallicRoughness.y;
+    const PbrMetallicRoughness& pbrMaterial = material.pbrMetallicRoughness;
+    glm::vec3 wh = sample_wh(wo, xi, roughness);
+    float ior = material.dielectric.eta;
+    glm::vec3 fr = fresnelSchlick(AbsDot(wo, wh), glm::min(pow(((1 - ior) / (1 + ior)), 2.f) * material.specular.specularColorFactor, glm::vec3(1.f)));
+    glm::vec3 weightSpec = material.specular.specularFactor * fr;
+    float pSpec = colorToGreyscale(weightSpec) * (1 - metallic);
+    float pDiff = (1.f - material.specular.specularFactor * glm::min(glm::min(fr.x, fr.y), fr.z)) * (1 - metallic);
+    float pMetal = metallic;
+    float total = pSpec + pDiff + pMetal;
+    pSpec /= total;
+    pDiff /= total;
+    pMetal /= total;
+
+    if (random < pSpec) {
+        glm::vec3 R;
+        if (roughness == 0.f) {
+            sample.pdf = 1.f;
+            R = sample_f_specular_refl(albedo, nor, wo, sample);
+        }
+        else
+            R = sample_f_microfacet_refl(albedo, nor, xi, wo, roughness * roughness, sample);
+        return R;
+    }
+    else if (random < pSpec + pMetal) {
+        glm::vec3 wh = sample_wh(wo, xi, roughness);
         glm::vec3 R;
         if (roughness == 0.f) {
             sample.pdf = 1.f;
@@ -374,7 +392,7 @@ __device__ glm::vec3 sample_f_pbrMetRough(glm::vec3 albedo, const float2& metall
         return R;
     }
     else {
-        glm::vec3 D = sample_f_diffuse(c_diff, xi, nor, sample);
+        glm::vec3 D = sample_f_diffuse(albedo, xi, nor, sample);
         return D;
     }
 }
@@ -475,7 +493,7 @@ __device__ glm::vec3 sample_f(const Material& mat, bool isProcedural, float scal
     }
     else if (mat.type == Material::Type::PBR)
     {
-        return sample_f_pbrMetRough(albedo, getMetallic(mat, uv), mat.pbrMetallicRoughness, nor, xi, wo, sample);
+        return sample_f_pbrMetRough(albedo, getMetallic(mat, uv), mat, nor, xi, wo, sample);
     }
     sample.pdf = -1.f;
     return glm::vec3(0.f);

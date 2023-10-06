@@ -225,11 +225,10 @@ void RenderImGui()
 	ImGui::Checkbox("Disable Gamma Correction", &imguiData->NoGammaCorrection);
 	float availWidth = ImGui::GetContentRegionAvail().x;
 	ImGui::SetNextItemWidth(availWidth * 0.25f);
-	bool focalLengthChanged = ImGui::SliderFloat("Focal Length", &imguiData->focalLength, 0.0f, 8.0f, "%.4f", ImGuiInputTextFlags_CallbackEdit);
+	bool focalLengthChanged = ImGui::DragFloat("Focal Length", &imguiData->focalLength, 0.1f, 0.0f, 8.0f, "%.4f", ImGuiInputTextFlags_CallbackEdit);
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(availWidth * 0.25f);
-	bool apertureSizeChanged = ImGui::SliderFloat("Aperture Size", &imguiData->apertureSize, 0.000f, 0.01f, "%.4f", ImGuiInputTextFlags_CallbackEdit);
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	bool apertureSizeChanged = ImGui::DragFloat("Aperture Size", &imguiData->apertureSize, 0.001f, 0.000f, 0.05f, "%.4f", ImGuiInputTextFlags_CallbackEdit);
 	ImGui::SetNextItemWidth(availWidth * 0.25f);
 	bool cameraPhiChanged = ImGui::DragFloat("Camera Phi", &imguiData->phi, 0.1f, -PI, PI, "%.4f");
 	ImGui::SameLine();
@@ -237,6 +236,7 @@ void RenderImGui()
 	bool cameraThetaChanged = ImGui::DragFloat("Camera Theta", &imguiData->theta, 0.1f, 0.001f, PI - 0.001f, "%.4f");
 	bool cameraLookAtChanged = ImGui::DragFloat3("Camera Look At", &imguiData->cameraLookAt.x, 0.1f, 0.0f, 100.0f, "%.4f");
 	bool zoomChanged = ImGui::DragFloat("Zoom", &imguiData->zoom, 0.01f, 0.01f, 5.0f, "%.4f");
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::End();
 
 

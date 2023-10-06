@@ -182,6 +182,11 @@ struct Material {
         float eta = 1.55f;
     }dielectric;
 
+    struct Specular {
+        float specularFactor = 0.f;
+        glm::vec3 specularColorFactor = glm::vec3(0.f);
+    }specular;
+
     struct Metal {
         glm::vec3 etat = glm::vec3(0.f);
         glm::vec3 k = glm::vec3(0.f);
